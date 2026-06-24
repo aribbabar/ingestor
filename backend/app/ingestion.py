@@ -26,6 +26,37 @@ CHUNK_OVERLAP_CHARS = 400
 FRONT_MATTER_RE = re.compile(r"\A---\s*\n.*?\n---\s*(?:\n|$)", re.DOTALL)
 FASTAPI_INCLUDE_RE = re.compile(r"\{\*\s+(?P<target>[^\s*]+)(?P<options>[^*]*)\*\}")
 MDX_EXAMPLE_RE = re.compile(r"<(?P<tag>ExampleTabs|ExampleCode|ExamplePreview)\s+name=\"(?P<name>[^\"]+)\"\s*/>")
+MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
+WEB_CHROME_EXACT_LINES = {
+    "ask ai",
+    "company",
+    "community",
+    "compliance",
+    "copy neon init command",
+    "copy page",
+    "neon docs",
+    "resources",
+    "search...",
+    "set up neon with ai",
+    "thank you for your feedback!",
+    "was this page helpful?",
+    "yesno",
+}
+WEB_CHROME_PREFIXES = (
+    "a databricks company",
+    "all rights reserved",
+    "full neon documentation index:",
+    "search...",
+)
+WEB_CHROME_CONTAINS = (
+    "ccpacompliant",
+    "gdprcompliant",
+    "iso 27001certified",
+    "iso 27701certified",
+    "read the changelog",
+    "soc 2certified",
+    "trust center",
+)
 CODE_LANGUAGE_BY_SUFFIX = {
     ".js": "js",
     ".jsx": "jsx",
@@ -117,7 +148,7 @@ def document_uri(path: Path, root: Path, uri_path: Path | None, uri_is_file: boo
 
 
 def document_from_web_page(url: str, content: str, title: str | None = None) -> dict | None:
-    normalized = normalize_content(content, ".md")
+    normalized = clean_web_markdown(normalize_content(content, ".md"))
     if not normalized.strip():
         return None
     inferred_title = title or infer_web_title(url)
@@ -226,6 +257,57 @@ def normalize_content(raw: str, suffix: str, path: Path | None = None, root: Pat
             content = expand_markdown_includes(content, path, root or path.parent)
             content = expand_mdx_examples(content, path, root or path.parent)
     return content
+
+
+def clean_web_markdown(content: str) -> str:
+    lines: list[str] = []
+    skip_on_this_page = False
+    skip_footer = False
+    for raw_line in content.splitlines():
+        line = MARKDOWN_IMAGE_RE.sub("", raw_line).rstrip()
+        normalized = normalize_chrome_line(line)
+        if normalized == "### on this page" or normalized == "on this page":
+            skip_on_this_page = True
+            continue
+        if skip_on_this_page:
+            if line.startswith("#"):
+                skip_on_this_page = False
+            elif re.match(r"^\s*[-*]\s+\[", line):
+                continue
+        if normalized in {"neon docs", "company", "resources", "community", "compliance"}:
+            skip_footer = True
+            continue
+        if skip_footer:
+            if line.startswith("#"):
+                skip_footer = False
+            elif not line.strip() or re.match(r"^\s*[-*]\s+", line) or normalized in WEB_CHROME_EXACT_LINES:
+                continue
+        if is_web_chrome_line(line):
+            continue
+        lines.append(line)
+    return compact_text("\n".join(lines))
+
+
+def is_web_chrome_line(line: str) -> bool:
+    normalized = normalize_chrome_line(line)
+    if not normalized:
+        return False
+    if normalized in WEB_CHROME_EXACT_LINES:
+        return True
+    if normalized.startswith(WEB_CHROME_PREFIXES):
+        return True
+    if any(fragment in normalized for fragment in WEB_CHROME_CONTAINS):
+        return True
+    if re.fullmatch(r"\*\s+\[[^\]]+\]\(https://trust\.neon\.com[^)]*\)", line.strip(), re.IGNORECASE):
+        return True
+    return False
+
+
+def normalize_chrome_line(line: str) -> str:
+    text = MARKDOWN_IMAGE_RE.sub("", line)
+    text = re.sub(r"\[[^\]]*\]\([^)]*\)", "", text)
+    text = re.sub(r"\s+", " ", text).strip().lower()
+    return text
 
 
 def strip_front_matter(content: str) -> str:

@@ -8,8 +8,12 @@ from unittest import TestCase, main
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from app.ingestion import document_from_file, normalize_content
-from app.search import diversify_by_document, extract_code, meaningful_terms, source_quality_multiplier
+import app.search as search_module
+from app.database import Database
+from app.embedding import embedding_signature, tokenize
+from app.ingestion import clean_web_markdown, document_from_file, normalize_content
+from app.models import SearchMode, SourceKind, SourceRecord
+from app.search import diversify_by_document, extract_code, meaningful_terms, shape_result, source_quality_multiplier
 
 
 def make_search_row(
@@ -118,6 +122,36 @@ description: Learn responsive styles
         self.assertIn("```tsx", content)
         self.assertIn("<ColorModeButton />", content)
 
+    def test_web_markdown_chrome_is_removed(self) -> None:
+        cleaned = clean_web_markdown(
+            """[New in Neon: Read the changelog. ![](https://example.com/a.png)](https://neon.com/docs/changelog)
+Search...⌘K
+Ask AI
+
+# Database branching workflow primer
+With Neon, you can work with your data like code.
+
+### On this page
+  * [Usage](https://neon.com/docs/example#usage)
+  * [Examples](https://neon.com/docs/example#examples)
+
+Was this page helpful?
+YesNo
+Thank you for your feedback!
+Neon Docs
+A Databricks Company
+© Neon 2026. All rights reserved.
+"""
+        )
+
+        self.assertIn("# Database branching workflow primer", cleaned)
+        self.assertIn("With Neon, you can work with your data like code.", cleaned)
+        self.assertNotIn("Search...", cleaned)
+        self.assertNotIn("Ask AI", cleaned)
+        self.assertNotIn("On this page", cleaned)
+        self.assertNotIn("Was this page helpful", cleaned)
+        self.assertNotIn("Databricks", cleaned)
+
 
 class SearchShapingTests(TestCase):
     def test_jsx_blocks_are_treated_as_code(self) -> None:
@@ -193,6 +227,137 @@ class SearchShapingTests(TestCase):
         )
 
         self.assertEqual([row["uri"] for _, _, _, row in selected], ["docs/cloudrun/render.mdx", "docs/composition.mdx"])
+
+    def test_shape_result_returns_compact_clean_excerpt(self) -> None:
+        row = make_search_row(
+            title="Connection pooling",
+            uri="https://neon.com/docs/connect/connection-pooling",
+            section_path='["Connection pooling", "How to use connection pooling"]',
+            content="Connection pooling",
+        )
+        shaped = shape_result(
+            row,
+            """Search...⌘K
+Ask AI
+
+## How to use connection pooling
+To enable connection pooling, use a pooled connection string. Add `-pooler` to your endpoint ID.
+
+```
+const connectionString = "postgresql://user:pass@ep-example-pooler.us-east-2.aws.neon.tech/db?sslmode=require";
+```
+
+Was this page helpful?
+YesNo
+Thank you for your feedback!
+""",
+            {"connection", "pooling", "pooled"},
+            {"connection", "pooling", "pooled"},
+        )
+
+        self.assertIn("pooled connection string", shaped["content"])
+        self.assertNotIn("Search", shaped["content"])
+        self.assertNotIn("Was this page helpful", shaped["content"])
+        self.assertIsNotNone(shaped["code"])
+
+
+class NeonRetrievalSmokeTests(TestCase):
+    def test_neon_style_queries_retrieve_expected_docs(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            test_db = Database(Path(directory) / "ingestor.sqlite")
+            source = SourceRecord(
+                id="neon",
+                kind=SourceKind.WEB,
+                name="neon",
+                version="test",
+                location="https://neon.com/docs/introduction",
+                metadata={"embedding": embedding_signature()},
+            )
+            test_db.upsert_source(source)
+            test_db.replace_source_documents(
+                source,
+                [
+                    neon_document(
+                        "https://neon.com/docs/serverless/serverless-driver",
+                        "Neon serverless driver",
+                        "Use the driver over WebSockets. Pool and Client provide session and transaction support. "
+                        "Choose WebSocket for interactive transactions. HTTP uses fetch for one-shot queries. "
+                        "In Node.js, set neonConfig.webSocketConstructor = ws to supply a websocket constructor.",
+                    ),
+                    neon_document(
+                        "https://neon.com/docs/guides/prisma",
+                        "Direct connection for Prisma CLI",
+                        "Why two connection strings? Pooled connection DATABASE_URL is for application runtime. "
+                        "Direct connection DIRECT_URL is for Prisma migrate and db push schema operations.",
+                    ),
+                    neon_document(
+                        "https://neon.com/docs/guides/branching-neon-api",
+                        "Branching with the Neon API",
+                        "Create schema-only branches with init_source schema-only. Restore a branch using the branch restore endpoint.",
+                    ),
+                    neon_document(
+                        "https://neon.com/docs/cli/branches",
+                        "Neon CLI command: branches",
+                        "neonctl branches reset development --parent resets a child branch. "
+                        "neonctl branches restore restores a branch to a specified point in time.",
+                    ),
+                    neon_document(
+                        "https://neon.com/docs/guides/nestjs",
+                        "Connect a NestJS application to Neon",
+                        "Define a controller endpoint and query a table from a NestJS service.",
+                    ),
+                ],
+            )
+
+            original_db = search_module.db
+            search_module.db = test_db
+            try:
+                expectations = [
+                    (
+                        "Neon serverless driver transactions WebSocket fetch websocket constructor",
+                        "serverless/serverless-driver",
+                    ),
+                    (
+                        "Neon connection pooling Prisma pooled connection string directUrl migrations",
+                        "guides/prisma",
+                    ),
+                    (
+                        "Neon branching create branch schema data reset restore point",
+                        "cli/branches",
+                    ),
+                ]
+                for query, expected_uri_part in expectations:
+                    results = search_module.search_chunks(
+                        query=query,
+                        source_name="neon",
+                        limit=5,
+                        mode=SearchMode.KEYWORD,
+                    )
+                    self.assertTrue(
+                        any(expected_uri_part in result.uri for result in results),
+                        f"{expected_uri_part} not found for query {query!r}: {[result.uri for result in results]}",
+                    )
+            finally:
+                search_module.db = original_db
+
+
+def neon_document(uri: str, title: str, content: str) -> dict:
+    chunk = {
+        "ordinal": 0,
+        "title": title,
+        "uri": uri,
+        "content": f"# {title}\n\n{content}",
+        "section_path": [title],
+        "token_count": len(tokenize(content)),
+        "embedding": [],
+    }
+    return {
+        "uri": uri,
+        "title": title,
+        "content": chunk["content"],
+        "content_hash": uri,
+        "chunks": [chunk],
+    }
 
 
 if __name__ == "__main__":

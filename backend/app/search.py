@@ -6,6 +6,7 @@ import sqlite3
 
 from app.database import db
 from app.embedding import EmbeddingError, cosine, embed_text, embedding_signature, tokenize
+from app.ingestion import clean_web_markdown
 from app.models import SearchMode, SearchResult, SourceRecord, SourceStatus
 
 
@@ -194,7 +195,7 @@ def search_chunks(
                 source_name=row["source_name"],
                 title=row["title"],
                 uri=row["uri"],
-                content=result_context,
+                content=shaped["content"] or shaped["summary"],
                 summary=shaped["summary"],
                 code=shaped["code"],
                 section_path=parse_section_path(row["section_path"]),
@@ -525,12 +526,78 @@ def shape_result(
     expanded_terms: set[str],
 ) -> dict[str, str | None]:
     phrases = expected_phrases(query_terms)
-    summary = extract_summary(content, query_terms | expanded_terms, phrases)
-    code = extract_code(content, query_terms | expanded_terms, phrases)
+    clean_content = clean_result_content(content)
+    excerpt = extract_excerpt(clean_content, query_terms | expanded_terms, phrases)
+    summary_source = excerpt or clean_content
+    summary = extract_summary(summary_source, query_terms | expanded_terms, phrases)
+    code = extract_code(clean_content, query_terms | expanded_terms, phrases)
     if not summary:
         section_path = parse_section_path(row["section_path"])
         summary = " / ".join(section_path) if section_path else str(row["title"] or "").strip()
-    return {"summary": summary, "code": code}
+    if not excerpt:
+        excerpt = summary
+    return {"summary": summary, "content": excerpt, "code": code}
+
+
+def clean_result_content(content: str) -> str:
+    return clean_web_markdown(content)
+
+
+def extract_excerpt(content: str, terms: set[str], phrases: list[str]) -> str:
+    excerpt_source = CODE_BLOCK_RE.sub("", content)
+    blocks = [block.strip() for block in re.split(r"\n{2,}", excerpt_source) if block.strip()]
+    candidates = []
+    for block in blocks:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        useful_lines = [line for line in lines if not is_low_value_excerpt_line(line)]
+        candidates.extend(matched_line_windows(useful_lines, terms, phrases))
+        if useful_lines:
+            candidates.append("\n".join(useful_lines))
+    ranked = rank_text_candidates(candidates, terms, phrases)
+    if not ranked:
+        return ""
+    return trim_excerpt(normalize_text(ranked[0][1]), max_chars=900)
+
+
+def matched_line_windows(lines: list[str], terms: set[str], phrases: list[str]) -> list[str]:
+    windows: list[str] = []
+    for index, line in enumerate(lines):
+        normalized = normalize_text(line)
+        line_terms = set(tokenize(normalized))
+        phrase_hits = any(phrase.lower() in normalized.lower() for phrase in phrases)
+        if not phrase_hits and not (terms & line_terms):
+            continue
+        window = [line]
+        for follower in lines[index + 1 : index + 3]:
+            if follower.startswith("#") and window:
+                break
+            window.append(follower)
+        windows.append("\n".join(window))
+    return windows
+
+
+def is_low_value_excerpt_line(line: str) -> bool:
+    normalized = normalize_text(line).lower()
+    if not normalized:
+        return True
+    if normalized in {"console", "cli", "api", "output", "show output"}:
+        return True
+    if normalized.startswith("![") or normalized.startswith("was this page helpful"):
+        return True
+    if re.fullmatch(r"[-*]\s+\[[^\]]+\]\([^)]*\)", line):
+        return True
+    return False
+
+
+def trim_excerpt(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    cutoff = text.rfind(". ", 0, max_chars)
+    if cutoff < max_chars // 2:
+        cutoff = text.rfind(" ", 0, max_chars)
+    if cutoff < max_chars // 2:
+        cutoff = max_chars
+    return text[:cutoff].rstrip(" .") + "."
 
 
 def extract_summary(content: str, terms: set[str], phrases: list[str]) -> str:
