@@ -59,6 +59,7 @@ class Database:
                 """
             )
         self._ensure_column("chunks", "section_path", "TEXT NOT NULL DEFAULT '[]'")
+        self._ensure_vector_index()
 
     def upsert_source(self, source: SourceRecord) -> SourceRecord:
         source.updated_at = utc_now()
@@ -322,11 +323,8 @@ class Database:
         if vector is None:
             return
         connection = session.connection().connection.driver_connection
-        if not vector_index.ensure_index_table(connection, len(vector)):
-            return
+        vector_index.ensure_index_table(connection, len(vector))
         serialized = vector_index.serialize(vector)
-        if serialized is None:
-            return
         session.execute(
             text(
                 f"""
@@ -338,7 +336,7 @@ class Database:
         )
 
     def _delete_vector_rows(self, session: Session, chunk_ids: list[int]) -> None:
-        if not chunk_ids or not vector_index.is_available():
+        if not chunk_ids:
             return
         connection = session.connection().connection.driver_connection
         if not vector_index.table_exists(connection, vector_index.CHUNKS_VEC_TABLE):
@@ -348,6 +346,32 @@ class Database:
                 text(f"DELETE FROM {vector_index.CHUNKS_VEC_TABLE} WHERE rowid = :rowid"),
                 {"rowid": chunk_id},
             )
+
+    def _ensure_vector_index(self) -> None:
+        with self.connect() as connection:
+            rows = connection.execute("SELECT id, source_id, embedding FROM chunks").fetchall()
+            vectors: list[tuple[int, str, list[float]]] = []
+            dimensions: int | None = None
+            for row in rows:
+                vector = vector_index.parse_embedding(row["embedding"])
+                if vector is None:
+                    continue
+                if dimensions is None:
+                    dimensions = len(vector)
+                if len(vector) == dimensions:
+                    vectors.append((int(row["id"]), str(row["source_id"]), vector))
+            if dimensions is None:
+                return
+            vector_index.ensure_index_table(connection, dimensions)
+            for chunk_id, source_id, vector in vectors:
+                connection.execute(
+                    f"""
+                    INSERT OR REPLACE INTO {vector_index.CHUNKS_VEC_TABLE} (rowid, source_id, embedding)
+                    VALUES (?, ?, ?)
+                    """,
+                    (chunk_id, source_id, vector_index.serialize(vector)),
+                )
+            connection.commit()
 
     def _source_from_table(self, row: SourceTable) -> SourceRecord:
         return SourceRecord(

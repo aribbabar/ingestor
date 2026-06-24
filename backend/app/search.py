@@ -6,7 +6,7 @@ import sqlite3
 
 from app import vector_index
 from app.db import db
-from app.embedding import EmbeddingError, cosine, embed_text, embedding_signature, tokenize
+from app.embedding import EmbeddingError, embed_text, embedding_signature, tokenize
 from app.models import SearchMode, SearchResult, SourceRecord, SourceStatus
 
 
@@ -385,25 +385,17 @@ def vector_search(query: str, source_ids: list[str] | None, limit: int) -> dict[
         query_vector = embed_text(query)
     except EmbeddingError:
         return {}
-    indexed = sqlite_vec_search(query_vector, source_ids, limit)
-    if indexed:
-        return indexed
-    return python_vector_search(query_vector, source_ids, limit)
+    return sqlite_vec_search(query_vector, source_ids, limit)
 
 
 def sqlite_vec_search(query_vector: list[float], source_ids: list[str] | None, limit: int) -> dict[int, float]:
-    if not vector_index.is_available():
-        return {}
-    try:
-        with db.connect() as connection:
-            if source_ids is None:
-                rows = vector_index.query(connection, query_vector, limit=limit)
-            else:
-                rows = []
-                for source_id in source_ids:
-                    rows.extend(vector_index.query(connection, query_vector, source_id=source_id, limit=limit))
-    except sqlite3.Error:
-        return {}
+    with db.connect() as connection:
+        if source_ids is None:
+            rows = vector_index.query(connection, query_vector, limit=limit)
+        else:
+            rows = []
+            for source_id in source_ids:
+                rows.extend(vector_index.query(connection, query_vector, source_id=source_id, limit=limit))
 
     if not rows:
         return {}
@@ -416,29 +408,6 @@ def distance_to_score(distance: float) -> float:
     if distance < 0:
         return 0.0
     return 1.0 / (1.0 + distance)
-
-
-def python_vector_search(query_vector: list[float], source_ids: list[str] | None, limit: int) -> dict[int, float]:
-    sql = "SELECT id, embedding FROM chunks"
-    params: list[object] = []
-    if source_ids is not None:
-        placeholders = ",".join("?" for _ in source_ids)
-        sql += f" WHERE source_id IN ({placeholders})"
-        params.extend(source_ids)
-    with db.connect() as connection:
-        rows = connection.execute(sql, params).fetchall()
-
-    scored = []
-    for row in rows:
-        try:
-            vector = json.loads(row["embedding"])
-        except json.JSONDecodeError:
-            continue
-        score = cosine(query_vector, vector)
-        if score > 0:
-            scored.append((int(row["id"]), score))
-    scored.sort(key=lambda item: item[1], reverse=True)
-    return {chunk_id: score for chunk_id, score in scored[:limit]}
 
 
 def fetch_chunks(chunk_ids: set[int]) -> list[sqlite3.Row]:

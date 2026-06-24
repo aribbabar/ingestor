@@ -4,29 +4,19 @@ import json
 import sqlite3
 from collections.abc import Sequence
 
+import sqlite_vec
+
 CHUNKS_VEC_TABLE = "chunks_vec"
 VECTOR_INDEX_META_TABLE = "vector_index_meta"
 VECTOR_INDEX_DIMENSIONS_KEY = "dimensions"
 
-try:
-    import sqlite_vec
-except ImportError:  # pragma: no cover - exercised when optional dependency is absent.
-    sqlite_vec = None
 
-
-def is_available() -> bool:
-    return sqlite_vec is not None
-
-
-def load(connection: sqlite3.Connection) -> bool:
-    if sqlite_vec is None:
-        return False
+def load(connection: sqlite3.Connection) -> None:
     try:
         connection.enable_load_extension(True)
         sqlite_vec.load(connection)
-        return True
-    except Exception:
-        return False
+    except Exception as exc:
+        raise RuntimeError("sqlite-vec is required but could not be loaded") from exc
     finally:
         try:
             connection.enable_load_extension(False)
@@ -34,9 +24,7 @@ def load(connection: sqlite3.Connection) -> bool:
             pass
 
 
-def serialize(vector: Sequence[float]) -> bytes | None:
-    if sqlite_vec is None:
-        return None
+def serialize(vector: Sequence[float]) -> bytes:
     return sqlite_vec.serialize_float32([float(value) for value in vector])
 
 
@@ -114,12 +102,11 @@ def create_index_table(connection: sqlite3.Connection, dimensions: int) -> None:
     record_dimensions(connection, dimensions)
 
 
-def ensure_index_table(connection: sqlite3.Connection, dimensions: int) -> bool:
-    if dimensions <= 0 or not is_available():
-        return False
+def ensure_index_table(connection: sqlite3.Connection, dimensions: int) -> None:
+    if dimensions <= 0:
+        raise ValueError("Vector index dimensions must be positive")
     if not table_exists(connection, CHUNKS_VEC_TABLE) or current_dimensions(connection) != dimensions:
         create_index_table(connection, dimensions)
-    return True
 
 
 def query(
@@ -129,13 +116,11 @@ def query(
     source_id: str | None = None,
     limit: int,
 ) -> list[tuple[int, float]]:
-    if not is_available() or not table_exists(connection, CHUNKS_VEC_TABLE):
-        return []
+    if not table_exists(connection, CHUNKS_VEC_TABLE):
+        raise RuntimeError("sqlite-vec chunk index has not been created")
     if current_dimensions(connection) != len(vector):
         return []
     serialized = serialize(vector)
-    if serialized is None:
-        return []
     if source_id is None:
         rows = connection.execute(
             f"""

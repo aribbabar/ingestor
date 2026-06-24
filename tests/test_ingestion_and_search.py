@@ -9,7 +9,6 @@ from unittest import TestCase, main
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import app.search as search_module
-from app import vector_index
 from app.crawler import markdown_from_result
 from app.db import Database
 from app.embedding import embedding_signature, tokenize
@@ -293,133 +292,178 @@ Thank you for your feedback!
 
 class VectorIndexTests(TestCase):
     def test_sqlite_vec_index_is_populated_during_ingestion(self) -> None:
-        if not vector_index.is_available():
-            self.skipTest("sqlite-vec is not installed")
-
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             test_db = Database(Path(directory) / "ingestor.sqlite")
-            source = SourceRecord(
-                id="vec-source",
-                kind=SourceKind.LOCAL,
-                name="vec-source",
-                version="test",
-                location="memory",
-                metadata={"embedding": embedding_signature()},
-            )
-            test_db.upsert_source(source)
-            test_db.replace_source_documents(
-                source,
-                [
-                    {
-                        "uri": "vectors.md",
-                        "title": "Vectors",
-                        "content": "# Vectors",
-                        "content_hash": "vectors",
-                        "chunks": [
-                            vector_chunk(0, "Alpha", "alpha", [1.0, 0.0, 0.0]),
-                            vector_chunk(1, "Beta", "beta", [0.0, 1.0, 0.0]),
-                        ],
-                    }
-                ],
-            )
-
-            with test_db.connect() as connection:
-                vec_count = connection.execute("SELECT count(*) FROM chunks_vec").fetchone()[0]
-                dimensions = connection.execute(
-                    "SELECT value FROM vector_index_meta WHERE key = 'dimensions'"
-                ).fetchone()[0]
-
-            original_db = search_module.db
-            search_module.db = test_db
             try:
-                results = search_module.sqlite_vec_search([1.0, 0.0, 0.0], ["vec-source"], 2)
+                source = SourceRecord(
+                    id="vec-source",
+                    kind=SourceKind.LOCAL,
+                    name="vec-source",
+                    version="test",
+                    location="memory",
+                    metadata={"embedding": embedding_signature()},
+                )
+                test_db.upsert_source(source)
+                test_db.replace_source_documents(
+                    source,
+                    [
+                        {
+                            "uri": "vectors.md",
+                            "title": "Vectors",
+                            "content": "# Vectors",
+                            "content_hash": "vectors",
+                            "chunks": [
+                                vector_chunk(0, "Alpha", "alpha", [1.0, 0.0, 0.0]),
+                                vector_chunk(1, "Beta", "beta", [0.0, 1.0, 0.0]),
+                            ],
+                        }
+                    ],
+                )
+
+                with test_db.connect() as connection:
+                    vec_count = connection.execute("SELECT count(*) FROM chunks_vec").fetchone()[0]
+                    dimensions = connection.execute(
+                        "SELECT value FROM vector_index_meta WHERE key = 'dimensions'"
+                    ).fetchone()[0]
+
+                original_db = search_module.db
+                search_module.db = test_db
+                try:
+                    results = search_module.sqlite_vec_search([1.0, 0.0, 0.0], ["vec-source"], 2)
+                finally:
+                    search_module.db = original_db
             finally:
-                search_module.db = original_db
+                test_db.engine.dispose()
 
         self.assertEqual(vec_count, 2)
         self.assertEqual(dimensions, "3")
         self.assertEqual(list(results), [1, 2])
         self.assertGreater(results[1], results[2])
 
+    def test_sqlite_vec_index_is_backfilled_for_existing_chunks(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            db_path = Path(directory) / "ingestor.sqlite"
+            test_db = Database(db_path)
+            try:
+                source = SourceRecord(
+                    id="vec-source",
+                    kind=SourceKind.LOCAL,
+                    name="vec-source",
+                    version="test",
+                    location="memory",
+                    metadata={"embedding": embedding_signature()},
+                )
+                test_db.upsert_source(source)
+                test_db.replace_source_documents(
+                    source,
+                    [
+                        {
+                            "uri": "vectors.md",
+                            "title": "Vectors",
+                            "content": "# Vectors",
+                            "content_hash": "vectors",
+                            "chunks": [vector_chunk(0, "Alpha", "alpha", [1.0, 0.0, 0.0])],
+                        }
+                    ],
+                )
+                with test_db.connect() as connection:
+                    connection.execute("DROP TABLE chunks_vec")
+                    connection.execute("DELETE FROM vector_index_meta")
+                    connection.commit()
+            finally:
+                test_db.engine.dispose()
+
+            rebuilt_db = Database(db_path)
+            try:
+                with rebuilt_db.connect() as connection:
+                    vec_count = connection.execute("SELECT count(*) FROM chunks_vec").fetchone()[0]
+            finally:
+                rebuilt_db.engine.dispose()
+
+        self.assertEqual(vec_count, 1)
+
 
 class NeonRetrievalSmokeTests(TestCase):
     def test_neon_style_queries_retrieve_expected_docs(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             test_db = Database(Path(directory) / "ingestor.sqlite")
-            source = SourceRecord(
-                id="neon",
-                kind=SourceKind.WEB,
-                name="neon",
-                version="test",
-                location="https://neon.com/docs/introduction",
-                metadata={"embedding": embedding_signature()},
-            )
-            test_db.upsert_source(source)
-            test_db.replace_source_documents(
-                source,
-                [
-                    neon_document(
-                        "https://neon.com/docs/serverless/serverless-driver",
-                        "Neon serverless driver",
-                        "Use the driver over WebSockets. Pool and Client provide session and transaction support. "
-                        "Choose WebSocket for interactive transactions. HTTP uses fetch for one-shot queries. "
-                        "In Node.js, set neonConfig.webSocketConstructor = ws to supply a websocket constructor.",
-                    ),
-                    neon_document(
-                        "https://neon.com/docs/guides/prisma",
-                        "Direct connection for Prisma CLI",
-                        "Why two connection strings? Pooled connection DATABASE_URL is for application runtime. "
-                        "Direct connection DIRECT_URL is for Prisma migrate and db push schema operations.",
-                    ),
-                    neon_document(
-                        "https://neon.com/docs/guides/branching-neon-api",
-                        "Branching with the Neon API",
-                        "Create schema-only branches with init_source schema-only. Restore a branch using the branch restore endpoint.",
-                    ),
-                    neon_document(
-                        "https://neon.com/docs/cli/branches",
-                        "Neon CLI command: branches",
-                        "neonctl branches reset development --parent resets a child branch. "
-                        "neonctl branches restore restores a branch to a specified point in time.",
-                    ),
-                    neon_document(
-                        "https://neon.com/docs/guides/nestjs",
-                        "Connect a NestJS application to Neon",
-                        "Define a controller endpoint and query a table from a NestJS service.",
-                    ),
-                ],
-            )
-
-            original_db = search_module.db
-            search_module.db = test_db
             try:
-                expectations = [
-                    (
-                        "Neon serverless driver transactions WebSocket fetch websocket constructor",
-                        "serverless/serverless-driver",
-                    ),
-                    (
-                        "Neon connection pooling Prisma pooled connection string directUrl migrations",
-                        "guides/prisma",
-                    ),
-                    (
-                        "Neon branching create branch schema data reset restore point",
-                        "cli/branches",
-                    ),
-                ]
-                for query, expected_uri_part in expectations:
-                    results = search_module.search_chunks(
-                        query=query,
-                        source_name="neon",
-                        limit=5,
-                        mode=SearchMode.KEYWORD,
-                    )
-                    self.assertTrue(
-                        any(expected_uri_part in result.uri for result in results),
-                        f"{expected_uri_part} not found for query {query!r}: {[result.uri for result in results]}",
-                    )
+                source = SourceRecord(
+                    id="neon",
+                    kind=SourceKind.WEB,
+                    name="neon",
+                    version="test",
+                    location="https://neon.com/docs/introduction",
+                    metadata={"embedding": embedding_signature()},
+                )
+                test_db.upsert_source(source)
+                test_db.replace_source_documents(
+                    source,
+                    [
+                        neon_document(
+                            "https://neon.com/docs/serverless/serverless-driver",
+                            "Neon serverless driver",
+                            "Use the driver over WebSockets. Pool and Client provide session and transaction support. "
+                            "Choose WebSocket for interactive transactions. HTTP uses fetch for one-shot queries. "
+                            "In Node.js, set neonConfig.webSocketConstructor = ws to supply a websocket constructor.",
+                        ),
+                        neon_document(
+                            "https://neon.com/docs/guides/prisma",
+                            "Direct connection for Prisma CLI",
+                            "Why two connection strings? Pooled connection DATABASE_URL is for application runtime. "
+                            "Direct connection DIRECT_URL is for Prisma migrate and db push schema operations.",
+                        ),
+                        neon_document(
+                            "https://neon.com/docs/guides/branching-neon-api",
+                            "Branching with the Neon API",
+                            "Create schema-only branches with init_source schema-only. Restore a branch using the branch restore endpoint.",
+                        ),
+                        neon_document(
+                            "https://neon.com/docs/cli/branches",
+                            "Neon CLI command: branches",
+                            "neonctl branches reset development --parent resets a child branch. "
+                            "neonctl branches restore restores a branch to a specified point in time.",
+                        ),
+                        neon_document(
+                            "https://neon.com/docs/guides/nestjs",
+                            "Connect a NestJS application to Neon",
+                            "Define a controller endpoint and query a table from a NestJS service.",
+                        ),
+                    ],
+                )
+
+                original_db = search_module.db
+                search_module.db = test_db
+                try:
+                    expectations = [
+                        (
+                            "Neon serverless driver transactions WebSocket fetch websocket constructor",
+                            "serverless/serverless-driver",
+                        ),
+                        (
+                            "Neon connection pooling Prisma pooled connection string directUrl migrations",
+                            "guides/prisma",
+                        ),
+                        (
+                            "Neon branching create branch schema data reset restore point",
+                            "cli/branches",
+                        ),
+                    ]
+                    for query, expected_uri_part in expectations:
+                        results = search_module.search_chunks(
+                            query=query,
+                            source_name="neon",
+                            limit=5,
+                            mode=SearchMode.KEYWORD,
+                        )
+                        self.assertTrue(
+                            any(expected_uri_part in result.uri for result in results),
+                            f"{expected_uri_part} not found for query {query!r}: {[result.uri for result in results]}",
+                        )
+                finally:
+                    search_module.db = original_db
             finally:
-                search_module.db = original_db
+                test_db.engine.dispose()
 
 
 def neon_document(uri: str, title: str, content: str) -> dict:
