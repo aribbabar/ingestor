@@ -6,8 +6,8 @@ from urllib.parse import urlparse
 
 from collections.abc import AsyncIterator
 
-from app.content import extract_main_markdown, has_obvious_web_chrome, html_to_markdown
-from app.ingestion import document_from_web_page
+from app.indexing.content import extract_main_markdown, has_obvious_web_chrome, html_to_markdown
+from app.indexing.documents import document_from_web_page
 
 
 async def crawl_web_documents(
@@ -229,3 +229,4 @@ def markdown_from_result_html(result: object) -> str:
 def root_domain(host: str) -> str:
     parts = host.split(".")
     return host if len(parts) <= 2 else ".".join(parts[-2:])
+

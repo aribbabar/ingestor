@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.chunking import build_document
-from app.content import infer_title, normalize_content
-from app.embedding import get_embedding_indexing_config
-from app.embedding_pipeline import embed_pending_documents
+from app.indexing.chunking import build_document
+from app.indexing.content import infer_title, normalize_content
+from app.retrieval.embeddings import get_embedding_indexing_config
+from app.indexing.embedding_pipeline import embed_pending_documents
 
 SUPPORTED_SUFFIXES = {
     ".md",
@@ -101,3 +101,4 @@ def document_uri(path: Path, root: Path, uri_path: Path | None, uri_is_file: boo
         return str(uri_path / path.relative_to(root))
     except ValueError:
         return str(uri_path / path.name)
+

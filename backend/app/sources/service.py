@@ -8,12 +8,12 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from app.config import get_settings
-from app.crawler import iter_web_documents
+from app.core.config import get_settings
+from app.indexing.crawler import iter_web_documents
 from app.db import db
-from app.embedding import embedding_signature, get_embedding_config, get_embedding_indexing_config
-from app.ingestion import iter_documents_from_paths
-from app.models import (
+from app.retrieval.embeddings import embedding_signature, get_embedding_config, get_embedding_indexing_config
+from app.indexing.documents import iter_documents_from_paths
+from app.domain.models import (
     JobRecord,
     JobStatus,
     LocalSourceRequest,
@@ -292,3 +292,4 @@ def clean_patterns(patterns: list[str]) -> list[str]:
 
 def internal_version() -> str:
     return datetime.now(UTC).strftime("ingest-%Y%m%d-%H%M%S")
+

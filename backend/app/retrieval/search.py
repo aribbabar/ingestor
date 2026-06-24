@@ -4,10 +4,10 @@ import json
 import re
 import sqlite3
 
-from app import vector_index
+from app.retrieval import vector_index
 from app.db import db
-from app.embedding import EmbeddingError, embed_text, embedding_signature, tokenize
-from app.models import SearchMode, SearchResult, SourceRecord, SourceStatus
+from app.retrieval.embeddings import EmbeddingError, embed_text, embedding_signature, tokenize
+from app.domain.models import SearchMode, SearchResult, SourceRecord, SourceStatus
 
 
 class SourceNotQueryableError(RuntimeError):
@@ -510,3 +510,4 @@ def build_fts_query(query: str) -> str:
     if not terms:
         return '""'
     return " OR ".join(f'"{term}"' for term in terms)
+

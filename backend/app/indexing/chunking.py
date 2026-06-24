@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 import re
 
-from app.content import compact_text
-from app.embedding import get_embedding_indexing_config, tokenize
-from app.embedding_pipeline import embed_chunks
+from app.indexing.content import compact_text
+from app.retrieval.embeddings import get_embedding_indexing_config, tokenize
+from app.indexing.embedding_pipeline import embed_chunks
 
 CHUNK_TARGET_CHARS = 3600
 CHUNK_OVERLAP_CHARS = 400
@@ -84,3 +84,4 @@ def split_large_text(text: str) -> list[str]:
             break
         start = max(0, end - CHUNK_OVERLAP_CHARS)
     return chunks
+

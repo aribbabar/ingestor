@@ -8,13 +8,13 @@ from unittest import TestCase, main
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-import app.search as search_module
-from app.crawler import markdown_from_result
+import app.retrieval.search as search_module
+from app.indexing.crawler import markdown_from_result
 from app.db import Database
-from app.embedding import embedding_signature, tokenize
-from app.ingestion import clean_web_markdown, document_from_file, html_to_markdown, normalize_content
-from app.models import SearchMode, SourceKind, SourceRecord
-from app.search import diversify_by_document, extract_code, rank_lookup, shape_result
+from app.retrieval.embeddings import embedding_signature, tokenize
+from app.indexing.documents import clean_web_markdown, document_from_file, html_to_markdown, normalize_content
+from app.domain.models import SearchMode, SourceKind, SourceRecord
+from app.retrieval.search import diversify_by_document, extract_code, rank_lookup, shape_result
 
 
 def make_search_row(
@@ -499,3 +499,4 @@ def vector_chunk(ordinal: int, title: str, content: str, embedding: list[float])
 
 if __name__ == "__main__":
     main()
+

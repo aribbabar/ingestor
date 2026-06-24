@@ -9,10 +9,10 @@ import typer
 import yaml
 
 from app.db import db
-from app.models import LocalSourceRequest, SearchMode, WebSourceRequest
-from app.retrieval import get_default_search_mode
-from app.search import SourceNotQueryableError, search_chunks
-from app.service import index_source, register_local_source, register_web_source
+from app.domain.models import LocalSourceRequest, SearchMode, WebSourceRequest
+from app.retrieval.search import SourceNotQueryableError, search_chunks
+from app.retrieval.settings import get_default_search_mode
+from app.sources.service import index_source, register_local_source, register_web_source
 
 
 class OutputFormat(StrEnum):
@@ -150,3 +150,4 @@ def format_results(payload: Any, output: str) -> str:
 
 if __name__ == "__main__":
     main()
+

@@ -2,7 +2,7 @@ from tkinter import TclError, Tk, filedialog
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.models import FilePickResponse, FolderPickResponse
+from app.domain.models import FilePickResponse, FolderPickResponse
 
 router = APIRouter(prefix="/folders", tags=["folders"])
 
@@ -43,3 +43,4 @@ def pick_files() -> FilePickResponse:
         if root is not None:
             root.destroy()
     return FilePickResponse(paths=list(selected_paths))
+

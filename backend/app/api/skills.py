@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from app.config import get_settings
+from app.core.config import get_settings
 
 router = APIRouter(prefix="/skills", tags=["skills"])
 
@@ -149,3 +149,4 @@ def copy_skill(name: str, target_root: Path) -> None:
 
 def file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+

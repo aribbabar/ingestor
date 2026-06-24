@@ -8,8 +8,8 @@ import re
 
 import httpx
 
-from app.config import get_settings
-from app.models import EmbeddingIndexingStrategy
+from app.core.config import get_settings
+from app.domain.models import EmbeddingIndexingStrategy
 
 VECTOR_DIMENSIONS = 256
 DEFAULT_EMBEDDING_BATCH_SIZE = 32
@@ -268,3 +268,4 @@ def cosine(left: list[float], right: list[float]) -> float:
     if not left or not right or len(left) != len(right):
         return 0.0
     return sum(a * b for a, b in zip(left, right, strict=False))
+

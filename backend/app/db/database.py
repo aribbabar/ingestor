@@ -8,10 +8,10 @@ from pathlib import Path
 from sqlalchemy import delete, event, func, inspect, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app.config import get_settings
+from app.core.config import get_settings
 from app.db.models import AppSettingTable, ChunkTable, DocumentTable, JobTable, SourceTable, chunks_fts
-from app.models import JobRecord, JobStatus, SourceKind, SourceRecord, SourceStatus, utc_now
-from app import vector_index
+from app.domain.models import JobRecord, JobStatus, SourceKind, SourceRecord, SourceStatus, utc_now
+from app.retrieval import vector_index
 
 
 class Database:
@@ -413,3 +413,4 @@ class Database:
 
 
 db = Database()
+

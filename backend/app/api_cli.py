@@ -11,7 +11,7 @@ from typing import Annotated, Any, Callable
 
 import typer
 
-from app.models import SearchMode
+from app.domain.models import SearchMode
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8765"
 
@@ -284,3 +284,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

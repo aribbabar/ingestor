@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Ingestor"
-    project_root: Path = Field(default_factory=lambda: Path(__file__).resolve().parents[1])
+    project_root: Path = Field(default_factory=lambda: Path(__file__).resolve().parents[2])
     data_dir: Path | None = None
     cors_origins: list[str] = [
         "http://localhost:1420",

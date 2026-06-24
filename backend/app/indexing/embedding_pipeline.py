@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.embedding import embed_texts
+from app.retrieval.embeddings import embed_texts
 
 
 def embed_pending_documents(documents: list[dict], chunks: list[dict], batch_size: int):
@@ -18,3 +18,4 @@ def embed_chunks(chunks: list[dict], batch_size: int) -> None:
             raise RuntimeError("Embedding provider returned an unexpected number of vectors")
         for chunk, embedding in zip(batch, embeddings, strict=True):
             chunk["embedding"] = embedding
+

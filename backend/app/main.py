@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import router
-from app.config import get_settings
+from app.core.config import get_settings
 
 
 def create_app() -> FastAPI:
@@ -20,3 +20,4 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+

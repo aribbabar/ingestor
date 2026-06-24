@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.config import get_settings
+from app.core.config import get_settings
 from app.db import db
-from app.embedding import (
+from app.retrieval.embeddings import (
     EMBEDDING_MODEL_KEY,
     EMBEDDING_PROVIDER_KEY,
     OLLAMA_PROVIDER,
@@ -19,9 +19,9 @@ from app.embedding import (
     reset_embedding_indexing_config,
     set_embedding_indexing_config,
 )
-from app.folders import router as folders_router
-from app.skills import router as skills_router
-from app.models import (
+from app.api.folders import router as folders_router
+from app.api.skills import router as skills_router
+from app.domain.models import (
     EmbeddingSettingsUpdate,
     EmbeddingIndexingSettingsUpdate,
     LocalSourceRequest,
@@ -32,10 +32,10 @@ from app.models import (
     SourceRegistrationResponse,
     WebSourceRequest,
 )
-from app.retrieval import get_default_search_mode, reset_default_search_mode, set_default_search_mode
-from app.search import SourceNotQueryableError, current_embedding_display, search_chunks, stale_indexed_source_count
-from app.service import delete_source as delete_registered_source
-from app.service import read_job_log, register_local_source, register_web_source, start_index_job
+from app.retrieval.search import SourceNotQueryableError, current_embedding_display, search_chunks, stale_indexed_source_count
+from app.retrieval.settings import get_default_search_mode, reset_default_search_mode, set_default_search_mode
+from app.sources.service import delete_source as delete_registered_source
+from app.sources.service import read_job_log, register_local_source, register_web_source, start_index_job
 
 router = APIRouter(prefix="/api")
 router.include_router(folders_router)
@@ -230,3 +230,4 @@ def delete_source(source_id: str) -> SourceDeletionResponse:
 @router.post("/sources/{source_id}/delete", response_model=SourceDeletionResponse)
 def delete_source_action(source_id: str) -> SourceDeletionResponse:
     return delete_source(source_id)
+

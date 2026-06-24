@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.db import db
-from app.models import SearchMode
+from app.domain.models import SearchMode
 
 DEFAULT_SEARCH_MODE_KEY = "default_search_mode"
 
@@ -22,3 +22,4 @@ def set_default_search_mode(mode: SearchMode) -> None:
 
 def reset_default_search_mode() -> None:
     db.delete_app_settings([DEFAULT_SEARCH_MODE_KEY])
+
