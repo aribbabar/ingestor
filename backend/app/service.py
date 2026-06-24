@@ -1,0 +1,294 @@
+from __future__ import annotations
+
+import asyncio
+import re
+import shutil
+import threading
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+
+from app.config import get_settings
+from app.crawler import iter_web_documents
+from app.database import db
+from app.embedding import embedding_signature, get_embedding_config, get_embedding_indexing_config
+from app.ingestion import iter_documents_from_paths
+from app.models import (
+    JobRecord,
+    JobStatus,
+    LocalSourceRequest,
+    SourceKind,
+    SourceRecord,
+    SourceStatus,
+    WebSourceRequest,
+)
+
+
+def register_local_source(request: LocalSourceRequest) -> SourceRecord:
+    paths = [path.expanduser().resolve() for path in request.selected_paths()]
+    if not paths:
+        raise FileNotFoundError("Select at least one local folder or file.")
+    for path in paths:
+        if not path.exists():
+            raise FileNotFoundError(f"Path does not exist: {path}")
+    name = require_unique_source_name(request.name)
+    source = SourceRecord(
+        kind=SourceKind.LOCAL,
+        name=name,
+        version=request.version or internal_version(),
+        location="; ".join(str(path) for path in paths),
+    )
+    snapshot = snapshot_local_paths(source, paths)
+    source.metadata = {
+        "original_paths": [str(path) for path in paths],
+        "snapshot_dir": str(snapshot["snapshot_dir"]),
+        "snapshot_paths": [str(path) for path in snapshot["snapshot_paths"]],
+        "path_mappings": snapshot["path_mappings"],
+        "paths": [str(path) for path in snapshot["snapshot_paths"]],
+    }
+    return db.upsert_source(source)
+
+
+def snapshot_local_paths(source: SourceRecord, paths: list[Path]) -> dict:
+    settings = get_settings()
+    snapshot_dir = settings.local_source_dir / f"{internal_version()}-{source.id[:8]}-{safe_path_name(source.name)}"
+    snapshot_dir.mkdir(parents=True, exist_ok=False)
+
+    snapshot_paths: list[Path] = []
+    mappings: list[dict[str, str]] = []
+    used_names: set[str] = set()
+    try:
+        for path in paths:
+            target_name = unique_target_name(path.name or "selection", used_names)
+            target = snapshot_dir / target_name
+            if path.is_dir():
+                shutil.copytree(path, target, ignore=ignore_snapshot_entries)
+                kind = "directory"
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
+                kind = "file"
+            snapshot_paths.append(target)
+            mappings.append({"original": str(path), "stored": str(target), "kind": kind})
+    except Exception:
+        shutil.rmtree(snapshot_dir, ignore_errors=True)
+        raise
+
+    return {
+        "snapshot_dir": snapshot_dir,
+        "snapshot_paths": snapshot_paths,
+        "path_mappings": mappings,
+    }
+
+
+def ignore_snapshot_entries(directory: str, names: list[str]) -> set[str]:
+    ignored_dirs = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__", "dist", "build"}
+    return {name for name in names if name in ignored_dirs}
+
+
+def unique_target_name(name: str, used_names: set[str]) -> str:
+    candidate = name
+    stem = Path(name).stem or "selection"
+    suffix = Path(name).suffix
+    index = 2
+    while candidate.lower() in used_names:
+        candidate = f"{stem}-{index}{suffix}"
+        index += 1
+    used_names.add(candidate.lower())
+    return candidate
+
+
+def safe_path_name(value: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-._")
+    return safe[:48] or "local-docs"
+
+
+def local_source_paths(source: SourceRecord) -> tuple[list[Path], list[Path] | None]:
+    snapshot_paths = [Path(path) for path in source.metadata.get("snapshot_paths", [])]
+    original_paths = [Path(path) for path in source.metadata.get("original_paths", [])]
+    if snapshot_paths:
+        return snapshot_paths, original_paths if len(original_paths) == len(snapshot_paths) else None
+
+    legacy_paths = [Path(path) for path in source.metadata.get("paths", [])]
+    return legacy_paths, None
+
+
+def remove_local_snapshot(source: SourceRecord) -> None:
+    snapshot_dir = source.metadata.get("snapshot_dir")
+    if not snapshot_dir:
+        return
+    settings = get_settings()
+    root = settings.local_source_dir.resolve()
+    target = Path(str(snapshot_dir)).expanduser().resolve()
+    if target == root or root not in target.parents:
+        return
+    shutil.rmtree(target, ignore_errors=True)
+
+
+def delete_source(source_id: str) -> SourceRecord | None:
+    deleted = db.delete_source(source_id)
+    if deleted and deleted.kind == SourceKind.LOCAL:
+        remove_local_snapshot(deleted)
+    return deleted
+
+
+def register_web_source(request: WebSourceRequest) -> SourceRecord:
+    name = require_unique_source_name(request.name)
+    source = SourceRecord(
+        kind=SourceKind.WEB,
+        name=name,
+        version=request.version or internal_version(),
+        location=str(request.url),
+        metadata={
+            "max_depth": request.max_depth,
+            "max_pages": request.max_pages,
+            "scope": request.scope,
+            "include_patterns": clean_patterns(request.include_patterns),
+            "exclude_patterns": clean_patterns(request.exclude_patterns),
+        },
+    )
+    return db.upsert_source(source)
+
+
+def index_source(source_id: str, job: JobRecord | None = None) -> SourceRecord:
+    source = db.get_source(source_id)
+    if source is None:
+        raise KeyError("Source not found")
+    started_at = datetime.now(UTC)
+    started_timer = time.perf_counter()
+    embedding_config = get_embedding_config()
+    indexing_config = get_embedding_indexing_config()
+    source.status = SourceStatus.INDEXING
+    source.error = None
+    db.upsert_source(source)
+    log(job, f"Indexing {source.name} ({source.kind})")
+
+    try:
+        if source.kind == SourceKind.LOCAL:
+            indexed = index_local_source_incrementally(source, job)
+        else:
+            indexed = asyncio.run(index_web_source_incrementally(source, job))
+        finished_at = datetime.now(UTC)
+        indexed.metadata = {
+            **indexed.metadata,
+            "embedding": embedding_signature(embedding_config),
+            "last_index": {
+                "started_at": started_at.isoformat(),
+                "finished_at": finished_at.isoformat(),
+                "duration_seconds": round(time.perf_counter() - started_timer, 3),
+                "document_count": indexed.document_count,
+                "chunk_count": indexed.chunk_count,
+                "indexing_strategy": indexing_config.strategy.value,
+                "embedding_batch_size": indexing_config.batch_size,
+                "effective_embedding_batch_size": indexing_config.effective_batch_size,
+            },
+        }
+        indexed = db.upsert_source(indexed)
+        log(job, f"Indexed {indexed.document_count} documents into {indexed.chunk_count} chunks")
+        if job:
+            db.update_job(job, JobStatus.SUCCEEDED, "Index complete")
+        return indexed
+    except Exception as exc:
+        source.status = SourceStatus.FAILED
+        source.error = str(exc)
+        db.upsert_source(source)
+        log(job, f"Index failed: {exc}")
+        if job:
+            db.update_job(job, JobStatus.FAILED, str(exc))
+        raise
+
+
+def start_index_job(source_id: str) -> JobRecord:
+    job = db.create_job(source_id)
+    thread = threading.Thread(target=_run_job, args=(source_id, job), daemon=True)
+    thread.start()
+    return job
+
+
+def _run_job(source_id: str, job: JobRecord) -> None:
+    try:
+        index_source(source_id, job)
+    except Exception:
+        return
+
+
+def index_local_source_incrementally(source: SourceRecord, job: JobRecord | None) -> SourceRecord:
+    paths, uri_paths = local_source_paths(source)
+    db.clear_source_documents(source)
+    indexed = source
+    log(job, "Scanning local snapshot for supported docs")
+
+    for document in iter_documents_from_paths(paths, uri_paths):
+        indexed = db.add_source_document(source, document)
+        log(
+            job,
+            f"Indexed file {indexed.document_count}: {document['uri']} "
+            f"({indexed.chunk_count} chunks total)",
+        )
+
+    indexed = db.get_source(source.id) or indexed
+    if indexed.document_count == 0:
+        raise RuntimeError("No supported documentation files or pages were found.")
+    indexed.status = SourceStatus.INDEXED
+    indexed.error = None
+    return db.upsert_source(indexed)
+
+
+async def index_web_source_incrementally(source: SourceRecord, job: JobRecord | None) -> SourceRecord:
+    db.clear_source_documents(source)
+    indexed = source
+    log(job, "Crawling website and indexing pages as they are discovered")
+
+    async for document in iter_web_documents(
+        source.location,
+        max_depth=int(source.metadata.get("max_depth", 3)),
+        max_pages=int(source.metadata.get("max_pages", 1000)),
+        scope=str(source.metadata.get("scope", "hostname")),
+        include_patterns=list(source.metadata.get("include_patterns", [])),
+        exclude_patterns=list(source.metadata.get("exclude_patterns", [])),
+    ):
+        indexed = db.add_source_document(source, document)
+        log(
+            job,
+            f"Indexed page {indexed.document_count}: {document['uri']} "
+            f"({indexed.chunk_count} chunks total)",
+        )
+
+    indexed = db.get_source(source.id) or indexed
+    if indexed.document_count == 0:
+        raise RuntimeError("No supported documentation files or pages were found.")
+    indexed.status = SourceStatus.INDEXED
+    indexed.error = None
+    return db.upsert_source(indexed)
+
+
+def log(job: JobRecord | None, message: str) -> None:
+    if job is None:
+        return
+    settings = get_settings()
+    log_path = settings.job_log_dir / f"{job.id}.log"
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(f"{message}\n")
+    db.update_job(job, message=message)
+
+
+def read_job_log(job_id: str) -> str:
+    path = get_settings().job_log_dir / f"{job_id}.log"
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def require_unique_source_name(name: str) -> str:
+    normalized = name.strip()
+    if not normalized:
+        raise ValueError("Source name is required.")
+    if db.find_source_by_name(normalized):
+        raise ValueError(f'A source named "{normalized}" already exists.')
+    return normalized
+
+
+def clean_patterns(patterns: list[str]) -> list[str]:
+    return [pattern.strip() for pattern in patterns if pattern.strip()]
+
+
+def internal_version() -> str:
+    return datetime.now(UTC).strftime("ingest-%Y%m%d-%H%M%S")

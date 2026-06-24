@@ -1,0 +1,18 @@
+.heading {
+  margin-bottom: var(--space-13);
+  width: 100%;
+}
+
+.heading h1 {
+  font-family: var(--font-display);
+  font-size: var(--font-size-page-title);
+  font-weight: 650;
+  line-height: 1.12;
+  margin-bottom: var(--space-4);
+}
+
+.heading p {
+  color: var(--muted);
+  line-height: var(--line-height-relaxed);
+  width: 100%;
+}

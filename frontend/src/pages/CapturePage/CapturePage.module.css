@@ -1,0 +1,521 @@
+.captureCard,
+.progressPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.02);
+  margin-bottom: var(--space-14);
+  padding: var(--card-padding);
+}
+
+.visuallyHidden {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-7);
+}
+
+.field label,
+.fieldLabel,
+.patternField label {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.field input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--fg);
+  outline: none;
+  width: 100%;
+}
+
+.field input {
+  height: var(--control-height-lg);
+}
+
+.field input {
+  padding: 0 var(--space-5);
+}
+
+.field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-ring-size) var(--accent-soft);
+}
+
+.selectionBlock {
+  display: grid;
+  gap: var(--space-5);
+  margin-bottom: var(--space-7);
+}
+
+.selectionHeader {
+  align-items: center;
+  display: flex;
+  gap: var(--space-7);
+  justify-content: space-between;
+}
+
+.selectionHeader h3 {
+  font-size: var(--font-size-md);
+  font-weight: 700;
+}
+
+.selectionHeader p {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-1);
+}
+
+.pathField {
+  display: flex;
+  gap: var(--space-4);
+  flex: 0 0 auto;
+}
+
+.selectedPathList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.selectedPath {
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  gap: var(--space-3);
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+}
+
+.selectedPath span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptySelection {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  padding: var(--space-6);
+}
+
+.selectedPath button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  height: var(--space-9);
+  padding: 0;
+  width: var(--space-9);
+}
+
+.advancedOptions {
+  background: color-mix(in oklch, var(--bg) 72%, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  margin-bottom: var(--space-7);
+  padding: var(--space-5) var(--space-7) var(--space-1);
+}
+
+.advancedOptions summary {
+  color: var(--fg);
+  cursor: pointer;
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  margin-bottom: var(--space-5);
+}
+
+.advancedIntro {
+  align-items: center;
+  display: flex;
+  gap: var(--space-7);
+  justify-content: space-between;
+  margin-bottom: var(--space-7);
+}
+
+.advancedIntro p,
+.fieldHint {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-body);
+}
+
+.resetButton {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  height: var(--control-height-sm);
+  padding: 0 var(--space-5);
+}
+
+.resetButton:hover {
+  border-color: var(--muted);
+}
+
+.optionGrid {
+  display: grid;
+  gap: var(--space-7);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.patternGrid {
+  display: grid;
+  gap: var(--space-7);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: var(--space-2);
+}
+
+.patternField {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.patternField textarea {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  min-height: 220px;
+  outline: none;
+  padding: var(--space-4) var(--space-5);
+  resize: vertical;
+  width: 100%;
+}
+
+.patternField textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-ring-size) var(--accent-soft);
+}
+
+.formActions {
+  align-items: center;
+  display: flex;
+  gap: var(--space-7);
+  justify-content: space-between;
+  margin-top: var(--space-3);
+}
+
+.hint,
+.linkButton {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+
+.primaryButton,
+.secondaryButton {
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font-weight: 700;
+  height: var(--control-height-lg);
+  transition: transform 80ms ease, opacity 120ms ease, background 120ms ease, border-color 120ms ease;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  background: var(--accent);
+  border: 0;
+  color: #fff;
+  font-size: var(--font-size-md);
+  padding: 0 var(--space-8);
+}
+
+.secondaryButton {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-size: var(--font-size-sm);
+  padding: 0 var(--space-6);
+}
+
+.primaryButton:hover {
+  transform: translateY(-1px);
+}
+
+.secondaryButton:hover {
+  background: var(--surface);
+  border-color: var(--muted);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: wait;
+  opacity: 0.55;
+  transform: none;
+}
+
+.recentPanel {
+  margin-top: var(--space-3);
+}
+
+.sectionHeading {
+  align-items: center;
+  display: flex;
+  gap: var(--space-7);
+  justify-content: space-between;
+  margin-bottom: var(--space-7);
+}
+
+.sectionHeading h2 {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.linkButton {
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+  padding: var(--space-2) var(--space-4);
+}
+
+.sourceList {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.sourceItem {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: var(--space-7);
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: var(--space-5) var(--space-7);
+  text-align: left;
+  width: 100%;
+}
+
+.sourceMeta {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.sourceMeta strong {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.sourceMeta span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyState {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-xl);
+  color: var(--muted);
+  font-size: var(--font-size-md);
+  padding: var(--space-12) var(--space-7);
+  text-align: center;
+}
+
+.progressContent {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-6);
+  padding-top: var(--space-7);
+}
+
+.progressSummary {
+  align-items: end;
+  display: flex;
+  gap: var(--space-7);
+  justify-content: space-between;
+}
+
+.progressSummary > div:first-child {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.progressSummary > div:first-child strong {
+  font-size: var(--font-size-lg);
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+.progressSummary > div:first-child span {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+
+.progressStats {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.progressStats span {
+  align-items: baseline;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  display: inline-flex;
+  font-size: var(--font-size-xs);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+}
+
+.progressStats strong {
+  color: var(--fg);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+.stageList {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+}
+
+.stageList li {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: var(--font-size-sm);
+  gap: var(--space-3);
+}
+
+.stageList li span {
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  height: var(--space-3);
+  width: var(--space-3);
+}
+
+.stageList .done,
+.stageList .active {
+  color: var(--fg);
+}
+
+.stageList .done span {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.stageList .active span {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--space-1) var(--accent-soft);
+}
+
+.jobDetail {
+  color: var(--muted);
+  display: grid;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  gap: var(--space-1);
+}
+
+.jobDetail span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logLine {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+  padding: var(--space-4) var(--space-5);
+}
+
+.logList {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.logList li {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .selectionHeader,
+  .advancedIntro,
+  .optionGrid,
+  .patternGrid,
+  .sourceItem,
+  .stageList {
+    grid-template-columns: 1fr;
+  }
+
+  .selectionHeader,
+  .advancedIntro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pathField {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .progressSummary,
+  .progressStats {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

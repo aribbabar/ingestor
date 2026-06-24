@@ -1,0 +1,100 @@
+.selectControl {
+  position: relative;
+  width: 100%;
+}
+
+.trigger {
+  align-items: center;
+  appearance: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-4);
+  justify-content: space-between;
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-4) 0 var(--space-5);
+  text-align: left;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  width: 100%;
+}
+
+.trigger:hover {
+  border-color: color-mix(in oklch, var(--accent) 36%, var(--border-strong));
+}
+
+.trigger:focus-visible,
+.trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-ring-size) var(--accent-soft);
+  outline: none;
+}
+
+.trigger:disabled {
+  background: color-mix(in oklch, var(--bg) 70%, var(--surface));
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.triggerText,
+.placeholder {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.placeholder {
+  color: var(--muted);
+}
+
+.menu {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 var(--space-10) var(--space-15) color-mix(in oklch, var(--fg) 10%, transparent);
+  display: grid;
+  gap: var(--space-1);
+  left: 0;
+  margin-top: var(--space-2);
+  max-height: 280px;
+  overflow: auto;
+  padding: var(--space-2);
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+}
+
+.menu button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  cursor: pointer;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  width: 100%;
+}
+
+.menu button:hover,
+.menu button.optionSelected {
+  background: var(--accent-soft);
+  border-color: color-mix(in oklch, var(--accent) 36%, var(--border));
+}
+
+.menu span {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.menu small {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+}

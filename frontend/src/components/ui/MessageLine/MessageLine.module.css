@@ -1,0 +1,24 @@
+.message {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  display: flex;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-body);
+  margin: var(--space-6) 0;
+  min-height: var(--control-height-sm);
+  padding: var(--space-3) var(--space-5);
+}
+
+.success {
+  background: oklch(97% 0.03 150);
+  border-color: oklch(88% 0.06 150);
+  color: oklch(42% 0.11 150);
+}
+
+.error {
+  background: oklch(97% 0.025 25);
+  border-color: oklch(87% 0.08 25);
+  color: var(--danger);
+}

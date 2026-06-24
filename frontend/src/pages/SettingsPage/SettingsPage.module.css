@@ -1,0 +1,279 @@
+.settingsPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-8);
+  padding: var(--space-8);
+}
+
+.panelHeader {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: var(--space-6);
+  justify-content: space-between;
+  padding-bottom: var(--space-7);
+}
+
+.panelTitle {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.panelTitle h2 {
+  font-size: var(--font-size-lg);
+  line-height: 1.2;
+}
+
+.panelTitle p {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+}
+
+.rowCopy p,
+.rowCopy span,
+.rowNote,
+.ollamaNotice {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-body);
+}
+
+.settingsRows {
+  display: grid;
+}
+
+.settingRow {
+  align-items: start;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: minmax(220px, 0.75fr) minmax(360px, 1fr);
+  padding: var(--space-7) 0;
+}
+
+.settingRow:last-child {
+  border-bottom: 0;
+}
+
+.rowCopy {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.rowCopy label {
+  color: var(--fg);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.rowCopy span,
+.rowNote,
+.ollamaNotice {
+  overflow-wrap: anywhere;
+}
+
+.ollamaNotice {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-4);
+}
+
+.rowControls,
+.indexingControls {
+  align-items: start;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.rowControls {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.indexingControls {
+  grid-template-columns: minmax(0, 1fr) 112px;
+}
+
+.indexingControls input {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-4);
+  width: 100%;
+}
+
+.indexingControls input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-ring-size) var(--accent-soft);
+  outline: none;
+}
+
+.saveButton,
+.secondaryButton {
+  align-items: center;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  justify-content: center;
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-5);
+  white-space: nowrap;
+}
+
+.saveButton {
+  background: var(--fg);
+  border: 1px solid var(--fg);
+  color: var(--surface);
+}
+
+.secondaryButton {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--fg);
+}
+
+.saveButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.errorText,
+.warningText {
+  font-size: var(--font-size-sm);
+  grid-column: 1 / -1;
+  line-height: var(--line-height-body);
+  margin: 0;
+}
+
+.errorText {
+  color: var(--danger);
+}
+
+.warningText {
+  color: oklch(42% 0.1 65);
+}
+
+.skillTargets {
+  display: grid;
+  gap: var(--space-6);
+  padding-top: var(--space-7);
+}
+
+.desktopRows {
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-7);
+}
+
+.toggleRow {
+  align-items: center;
+  color: var(--fg);
+  display: inline-flex;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  gap: var(--space-4);
+}
+
+.toggleRow input {
+  accent-color: var(--accent);
+  block-size: 18px;
+  inline-size: 18px;
+}
+
+.skillTarget {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-5);
+  padding-bottom: var(--space-6);
+}
+
+.skillTarget:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.skillTargetHeader {
+  align-items: start;
+  display: flex;
+  gap: var(--space-6);
+  justify-content: space-between;
+}
+
+.skillTargetHeader h3 {
+  font-size: var(--font-size-md);
+}
+
+.skillTargetHeader p {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.skillRows {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.skillRow {
+  align-items: center;
+  display: flex;
+  gap: var(--space-5);
+  justify-content: space-between;
+}
+
+.skillRow span {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.skillRow strong {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.skillRow strong[data-state='current'] {
+  color: var(--success);
+}
+
+.skillRow strong[data-state='stale'] {
+  color: var(--warning);
+}
+
+@media (max-width: 820px) {
+  .panelHeader,
+  .skillTargetHeader,
+  .settingRow,
+  .rowControls,
+  .indexingControls {
+    grid-template-columns: 1fr;
+  }
+
+  .panelHeader {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .skillTargetHeader {
+    display: grid;
+  }
+
+  .secondaryButton,
+  .saveButton {
+    width: 100%;
+  }
+}

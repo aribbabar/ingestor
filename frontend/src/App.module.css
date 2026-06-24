@@ -1,0 +1,12 @@
+.appShell {
+  margin: 0 auto;
+  max-width: var(--shell-max-width);
+  min-height: 100svh;
+  padding: var(--space-10) var(--space-9) var(--space-15);
+}
+
+@media (max-width: 720px) {
+  .appShell {
+    padding: var(--space-9) var(--space-7) var(--space-14);
+  }
+}

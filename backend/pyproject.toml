@@ -1,0 +1,21 @@
+[project]
+name = "ingestor"
+version = "0.1.0"
+description = "Standalone documentation ingestion, indexing, and retrieval for local agents."
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi[standard]>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic-settings>=2.6",
+  "PyYAML>=6.0",
+  "beautifulsoup4>=4.12",
+  "httpx>=0.28",
+  "crawl4ai>=0.8.9",
+]
+
+[project.scripts]
+ingestor = "app.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

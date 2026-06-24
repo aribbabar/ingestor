@@ -1,0 +1,7 @@
+fastapi[standard]>=0.115
+uvicorn[standard]>=0.30
+pydantic-settings>=2.6
+PyYAML>=6.0
+beautifulsoup4>=4.12
+httpx>=0.28
+crawl4ai>=0.8.9

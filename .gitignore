@@ -1,0 +1,44 @@
+# Local agent/workspace state
+.agents/
+.codex/
+
+# Editor settings
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+backend/.venv/
+backend/data/
+
+# Node/Vite
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+*.tsbuildinfo
+
+# Tauri/Rust build output
+target/
+frontend/src-tauri/gen/
+frontend/src-tauri/target/
+
+# Local environment and logs
+.env
+.env.*
+!.env.example
+*.log
+logs/
+
+# Generated release artifacts
+release/
+*.msi
+*.exe
+
+# Reference-only source material
+reference/
