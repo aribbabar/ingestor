@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from app.database import db
+from app.db import db
 from app.models import LocalSourceRequest, SearchMode, WebSourceRequest
 from app.retrieval import get_default_search_mode
 from app.search import SourceNotQueryableError, search_chunks

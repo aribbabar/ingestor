@@ -5,3 +5,4 @@ PyYAML>=6.0
 beautifulsoup4>=4.12
 httpx>=0.28
 crawl4ai>=0.8.9
+sqlmodel>=0.0.24

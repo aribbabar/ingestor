@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import app.search as search_module
 from app.crawler import markdown_from_result
-from app.database import Database
+from app.db import Database
 from app.embedding import embedding_signature, tokenize
 from app.ingestion import clean_web_markdown, document_from_file, normalize_content
 from app.models import SearchMode, SourceKind, SourceRecord

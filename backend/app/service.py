@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.crawler import iter_web_documents
-from app.database import db
+from app.db import db
 from app.embedding import embedding_signature, get_embedding_config, get_embedding_indexing_config
 from app.ingestion import iter_documents_from_paths
 from app.models import (

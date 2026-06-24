@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.database import db
+from app.db import db
 from app.models import SearchMode
 
 DEFAULT_SEARCH_MODE_KEY = "default_search_mode"

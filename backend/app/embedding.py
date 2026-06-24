@@ -69,7 +69,7 @@ def tokenize(text: str) -> list[str]:
 
 @lru_cache(maxsize=1)
 def get_embedding_config() -> EmbeddingConfig:
-    from app.database import db
+    from app.db import db
 
     settings = get_settings()
     provider = db.get_app_setting(EMBEDDING_PROVIDER_KEY) or LOCAL_HASHING_PROVIDER
@@ -89,7 +89,7 @@ def clear_embedding_config_cache() -> None:
 
 
 def reset_embedding_config() -> EmbeddingConfig:
-    from app.database import db
+    from app.db import db
 
     db.delete_app_settings([EMBEDDING_PROVIDER_KEY, EMBEDDING_MODEL_KEY])
     clear_embedding_config_cache()
@@ -98,7 +98,7 @@ def reset_embedding_config() -> EmbeddingConfig:
 
 @lru_cache(maxsize=1)
 def get_embedding_indexing_config() -> EmbeddingIndexingConfig:
-    from app.database import db
+    from app.db import db
 
     strategy_value = db.get_app_setting(EMBEDDING_INDEXING_STRATEGY_KEY) or EmbeddingIndexingStrategy.BATCH
     try:
@@ -115,7 +115,7 @@ def clear_embedding_indexing_config_cache() -> None:
 
 
 def set_embedding_indexing_config(strategy: EmbeddingIndexingStrategy, batch_size: int) -> EmbeddingIndexingConfig:
-    from app.database import db
+    from app.db import db
 
     coerced_batch_size = coerce_batch_size(batch_size)
     db.set_app_setting(EMBEDDING_INDEXING_STRATEGY_KEY, strategy.value)
@@ -125,7 +125,7 @@ def set_embedding_indexing_config(strategy: EmbeddingIndexingStrategy, batch_siz
 
 
 def reset_embedding_indexing_config() -> EmbeddingIndexingConfig:
-    from app.database import db
+    from app.db import db
 
     db.delete_app_settings([EMBEDDING_INDEXING_STRATEGY_KEY, EMBEDDING_BATCH_SIZE_KEY])
     clear_embedding_indexing_config_cache()

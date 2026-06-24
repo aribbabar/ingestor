@@ -4,7 +4,7 @@ import json
 import re
 import sqlite3
 
-from app.database import db
+from app.db import db
 from app.embedding import EmbeddingError, cosine, embed_text, embedding_signature, tokenize
 from app.ingestion import clean_web_markdown
 from app.models import SearchMode, SearchResult, SourceRecord, SourceStatus

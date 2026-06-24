@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 
 from app.config import get_settings
-from app.database import db
+from app.db import db
 from app.embedding import (
     EMBEDDING_MODEL_KEY,
     EMBEDDING_PROVIDER_KEY,
