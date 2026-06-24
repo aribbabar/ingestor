@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import argparse
 import json
+from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
+import typer
 import yaml
 
 from app.db import db
@@ -14,87 +15,108 @@ from app.search import SourceNotQueryableError, search_chunks
 from app.service import index_source, register_local_source, register_web_source
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(prog="ingestor")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+class OutputFormat(StrEnum):
+    JSON = "json"
+    YAML = "yaml"
+    TEXT = "text"
 
-    index_local = subparsers.add_parser("index-local", help="Index local documentation files or folders.")
-    index_local.add_argument("paths", nargs="+")
-    index_local.add_argument("--name", required=True)
-    index_local.add_argument("--version", default="latest")
 
-    index_web = subparsers.add_parser("index-web", help="Crawl and index remote documentation.")
-    index_web.add_argument("url")
-    index_web.add_argument("--name", required=True)
-    index_web.add_argument("--version", default="latest")
-    index_web.add_argument("--max-depth", type=int, default=3)
-    index_web.add_argument("--max-pages", type=int, default=1000)
-    index_web.add_argument("--scope", choices=["subpages", "hostname", "domain"], default="hostname")
-    index_web.add_argument("--include-pattern", action="append", default=[])
-    index_web.add_argument("--exclude-pattern", action="append", default=[])
+class CrawlScope(StrEnum):
+    SUBPAGES = "subpages"
+    HOSTNAME = "hostname"
+    DOMAIN = "domain"
 
-    search_parser = subparsers.add_parser("search", help="Search indexed documentation.")
-    search_parser.add_argument("source", help="Source id/name, or 'all'.")
-    search_parser.add_argument("query")
-    search_parser.add_argument("--limit", type=int, default=8)
-    search_parser.add_argument("--mode", choices=[mode.value for mode in SearchMode])
-    search_parser.add_argument("--output", choices=["json", "yaml", "text"], default="text")
 
-    subparsers.add_parser("list", help="List indexed sources.")
+app = typer.Typer(help="Index and search documentation sources.")
 
-    serve = subparsers.add_parser("serve", help="Run the FastAPI server.")
-    serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8765)
 
-    args = parser.parse_args()
+@app.command()
+def index_local(
+    paths: Annotated[list[Path], typer.Argument(help="Local documentation files or folders to index.")],
+    name: Annotated[str, typer.Option(help="Source name to register.")],
+    version: Annotated[str, typer.Option(help="Source version label.")] = "latest",
+) -> None:
+    """Index local documentation files or folders."""
+    source = register_local_source(LocalSourceRequest(paths=paths, name=name, version=version))
+    indexed = index_source(source.id)
+    print(f"Indexed {indexed.name}: {indexed.document_count} documents, {indexed.chunk_count} chunks")
 
-    if args.command == "index-local":
-        source = register_local_source(
-            LocalSourceRequest(paths=[Path(path) for path in args.paths], name=args.name, version=args.version)
+
+@app.command()
+def index_web(
+    url: Annotated[str, typer.Argument(help="Documentation URL to crawl.")],
+    name: Annotated[str, typer.Option(help="Source name to register.")],
+    version: Annotated[str, typer.Option(help="Source version label.")] = "latest",
+    max_depth: Annotated[int, typer.Option(help="Maximum crawl depth.")] = 3,
+    max_pages: Annotated[int, typer.Option(help="Maximum pages to crawl.")] = 1000,
+    scope: Annotated[CrawlScope, typer.Option(help="Limit crawl to subpages, host, or domain.")] = CrawlScope.HOSTNAME,
+    include_pattern: Annotated[
+        list[str] | None, typer.Option(help="URL pattern to include. Can be passed multiple times.")
+    ] = None,
+    exclude_pattern: Annotated[
+        list[str] | None, typer.Option(help="URL pattern to exclude. Can be passed multiple times.")
+    ] = None,
+) -> None:
+    """Crawl and index remote documentation."""
+    source = register_web_source(
+        WebSourceRequest(
+            url=url,
+            name=name,
+            version=version,
+            max_depth=max_depth,
+            max_pages=max_pages,
+            scope=scope.value,
+            include_patterns=include_pattern or [],
+            exclude_patterns=exclude_pattern or [],
         )
-        indexed = index_source(source.id)
-        print(f"Indexed {indexed.name}: {indexed.document_count} documents, {indexed.chunk_count} chunks")
-        return 0
-    if args.command == "index-web":
-        source = register_web_source(
-            WebSourceRequest(
-                url=args.url,
-                name=args.name,
-                version=args.version,
-                max_depth=args.max_depth,
-                max_pages=args.max_pages,
-                scope=args.scope,
-                include_patterns=args.include_pattern,
-                exclude_patterns=args.exclude_pattern,
-            )
-        )
-        indexed = index_source(source.id)
-        print(f"Indexed {indexed.name}: {indexed.document_count} documents, {indexed.chunk_count} chunks")
-        return 0
-    if args.command == "search":
-        source = None if args.source == "all" else args.source
-        mode = SearchMode(args.mode) if args.mode else get_default_search_mode()
-        try:
-            results = search_chunks(
-                query=args.query,
-                source_name=source,
-                limit=args.limit,
-                mode=mode,
-            )
-        except SourceNotQueryableError as error:
-            print(str(error))
-            return 2
-        print(format_results([result.model_dump() for result in results], args.output))
-        return 0
-    if args.command == "list":
-        print(format_results([source.model_dump(mode="json") for source in db.list_sources()], "yaml"))
-        return 0
-    if args.command == "serve":
-        import uvicorn
+    )
+    indexed = index_source(source.id)
+    print(f"Indexed {indexed.name}: {indexed.document_count} documents, {indexed.chunk_count} chunks")
 
-        uvicorn.run("app.main:app", host=args.host, port=args.port, reload=True)
-        return 0
-    return 1
+
+@app.command()
+def search(
+    source: Annotated[str, typer.Argument(help="Source id/name, or 'all'.")],
+    query: Annotated[str, typer.Argument(help="Search query.")],
+    limit: Annotated[int, typer.Option(help="Maximum number of results.")] = 8,
+    mode: Annotated[SearchMode | None, typer.Option(help="Retrieval mode.")] = None,
+    output: Annotated[OutputFormat, typer.Option(help="Output format.")] = OutputFormat.TEXT,
+) -> None:
+    """Search indexed documentation."""
+    source_name = None if source == "all" else source
+    search_mode = mode or get_default_search_mode()
+    try:
+        results = search_chunks(
+            query=query,
+            source_name=source_name,
+            limit=limit,
+            mode=search_mode,
+        )
+    except SourceNotQueryableError as error:
+        print(str(error))
+        raise typer.Exit(code=2) from error
+    print(format_results([result.model_dump() for result in results], output.value))
+
+
+@app.command("list")
+def list_sources() -> None:
+    """List indexed sources."""
+    print(format_results([source.model_dump(mode="json") for source in db.list_sources()], "yaml"))
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option(help="Host interface to bind.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to bind.")] = 8765,
+) -> None:
+    """Run the FastAPI server."""
+    import uvicorn
+
+    uvicorn.run("app.main:app", host=host, port=port, reload=True)
+
+
+def main() -> None:
+    app()
 
 
 def format_results(payload: Any, output: str) -> str:
@@ -127,4 +149,4 @@ def format_results(payload: Any, output: str) -> str:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

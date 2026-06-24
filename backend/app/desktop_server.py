@@ -1,21 +1,27 @@
 from __future__ import annotations
 
-import argparse
+from typing import Annotated
 
+import typer
 import uvicorn
 
 from app.main import app
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(prog="ingestor-backend")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
-    args = parser.parse_args()
+cli = typer.Typer(help="Run the Ingestor backend server.")
 
-    uvicorn.run(app, host=args.host, port=args.port)
-    return 0
+
+@cli.command()
+def serve(
+    host: Annotated[str, typer.Option(help="Host interface to bind.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to bind.")] = 8765,
+) -> None:
+    uvicorn.run(app, host=host, port=port)
+
+
+def main() -> None:
+    cli()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

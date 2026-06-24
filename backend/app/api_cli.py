@@ -1,114 +1,193 @@
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
 import time
 import urllib.error
 import urllib.request
-from typing import Any
+from enum import StrEnum
+from typing import Annotated, Any, Callable
+
+import typer
+
+from app.models import SearchMode
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8765"
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(prog="ingestor")
-    parser.add_argument("--api-url", default=os.environ.get("INGESTOR_API_URL", DEFAULT_BASE_URL))
-    subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("health")
+class TextOutputFormat(StrEnum):
+    TEXT = "text"
+    JSON = "json"
 
-    list_parser = subparsers.add_parser("list")
-    list_parser.add_argument("--output", choices=["text", "json"], default="text")
 
-    search = subparsers.add_parser("search")
-    search.add_argument("source")
-    search.add_argument("query")
-    search.add_argument("--limit", type=int, default=8)
-    search.add_argument("--mode", choices=["hybrid", "keyword", "vector"])
-    search.add_argument("--output", choices=["text", "json"], default="text")
+class CrawlScope(StrEnum):
+    SUBPAGES = "subpages"
+    HOSTNAME = "hostname"
+    DOMAIN = "domain"
 
-    index_local = subparsers.add_parser("index-local")
-    index_local.add_argument("paths", nargs="+")
-    index_local.add_argument("--name", required=True)
-    index_local.add_argument("--version", default="latest")
-    index_local.add_argument("--wait", action="store_true")
 
-    index_web = subparsers.add_parser("index-web")
-    index_web.add_argument("url")
-    index_web.add_argument("--name", required=True)
-    index_web.add_argument("--version", default="latest")
-    index_web.add_argument("--max-depth", type=int, default=2)
-    index_web.add_argument("--max-pages", type=int, default=100)
-    index_web.add_argument("--scope", choices=["subpages", "hostname", "domain"], default="hostname")
-    index_web.add_argument("--include-pattern", action="append", default=[])
-    index_web.add_argument("--exclude-pattern", action="append", default=[])
-    index_web.add_argument("--wait", action="store_true")
+app = typer.Typer(help="Call a running Ingestor backend API.")
 
-    reindex = subparsers.add_parser("reindex")
-    reindex.add_argument("source_id")
-    reindex.add_argument("--wait", action="store_true")
 
-    delete = subparsers.add_parser("delete")
-    delete.add_argument("source_id")
+@app.callback()
+def configure(
+    ctx: typer.Context,
+    api_url: Annotated[
+        str,
+        typer.Option(
+            envvar="INGESTOR_API_URL",
+            help="Base URL for the running Ingestor API.",
+        ),
+    ] = os.environ.get("INGESTOR_API_URL", DEFAULT_BASE_URL),
+) -> None:
+    ctx.obj = {"base_url": api_url.rstrip("/")}
 
-    args = parser.parse_args()
-    base_url = args.api_url.rstrip("/")
 
+def base_url_from(ctx: typer.Context) -> str:
+    return str(ctx.obj["base_url"])
+
+
+@app.command()
+def health(ctx: typer.Context) -> None:
+    """Check API health."""
+    run_api_command(lambda base_url: print_json(request(base_url, "/api/health")), base_url_from(ctx))
+
+
+@app.command("list")
+def list_sources(
+    ctx: typer.Context,
+    output: Annotated[TextOutputFormat, typer.Option(help="Output format.")] = TextOutputFormat.TEXT,
+) -> None:
+    """List indexed sources."""
+    run_api_command(lambda base_url: print_list(request(base_url, "/api/sources"), output.value), base_url_from(ctx))
+
+
+@app.command()
+def search(
+    ctx: typer.Context,
+    source: Annotated[str, typer.Argument(help="Source id/name, or 'all'.")],
+    query: Annotated[str, typer.Argument(help="Search query.")],
+    limit: Annotated[int, typer.Option(help="Maximum number of results.")] = 8,
+    mode: Annotated[SearchMode | None, typer.Option(help="Retrieval mode.")] = None,
+    output: Annotated[TextOutputFormat, typer.Option(help="Output format.")] = TextOutputFormat.TEXT,
+) -> None:
+    """Search through the running API."""
+
+    def command(base_url: str) -> None:
+        payload = request(
+            base_url,
+            "/api/sources/search",
+            method="POST",
+            body={
+                "source": None if source == "all" else source,
+                "query": query,
+                "limit": limit,
+                "mode": mode.value if mode else None,
+            },
+        )
+        print_search(payload, output.value)
+
+    run_api_command(command, base_url_from(ctx))
+
+
+@app.command()
+def index_local(
+    ctx: typer.Context,
+    paths: Annotated[list[str], typer.Argument(help="Local documentation files or folders to index.")],
+    name: Annotated[str, typer.Option(help="Source name to register.")],
+    version: Annotated[str, typer.Option(help="Source version label.")] = "latest",
+    wait: Annotated[bool, typer.Option(help="Wait for indexing to finish.")] = False,
+) -> None:
+    """Register and index local documentation through the API."""
+
+    def command(base_url: str) -> None:
+        created = request(
+            base_url,
+            "/api/sources/local-folder",
+            method="POST",
+            body={"paths": paths, "name": name, "version": version},
+        )
+        job = request(base_url, f"/api/sources/{created['source']['id']}/index", method="POST")
+        print_job(base_url, job, wait)
+
+    run_api_command(command, base_url_from(ctx))
+
+
+@app.command()
+def index_web(
+    ctx: typer.Context,
+    url: Annotated[str, typer.Argument(help="Documentation URL to crawl.")],
+    name: Annotated[str, typer.Option(help="Source name to register.")],
+    version: Annotated[str, typer.Option(help="Source version label.")] = "latest",
+    max_depth: Annotated[int, typer.Option(help="Maximum crawl depth.")] = 2,
+    max_pages: Annotated[int, typer.Option(help="Maximum pages to crawl.")] = 100,
+    scope: Annotated[CrawlScope, typer.Option(help="Limit crawl to subpages, host, or domain.")] = CrawlScope.HOSTNAME,
+    include_pattern: Annotated[
+        list[str] | None, typer.Option(help="URL pattern to include. Can be passed multiple times.")
+    ] = None,
+    exclude_pattern: Annotated[
+        list[str] | None, typer.Option(help="URL pattern to exclude. Can be passed multiple times.")
+    ] = None,
+    wait: Annotated[bool, typer.Option(help="Wait for indexing to finish.")] = False,
+) -> None:
+    """Register and index web documentation through the API."""
+
+    def command(base_url: str) -> None:
+        created = request(
+            base_url,
+            "/api/sources/web",
+            method="POST",
+            body={
+                "url": url,
+                "name": name,
+                "version": version,
+                "max_depth": max_depth,
+                "max_pages": max_pages,
+                "scope": scope.value,
+                "include_patterns": include_pattern or [],
+                "exclude_patterns": exclude_pattern or [],
+            },
+        )
+        job = request(base_url, f"/api/sources/{created['source']['id']}/index", method="POST")
+        print_job(base_url, job, wait)
+
+    run_api_command(command, base_url_from(ctx))
+
+
+@app.command()
+def reindex(
+    ctx: typer.Context,
+    source_id: Annotated[str, typer.Argument(help="Source id to reindex.")],
+    wait: Annotated[bool, typer.Option(help="Wait for indexing to finish.")] = False,
+) -> None:
+    """Reindex an existing source."""
+
+    def command(base_url: str) -> None:
+        job = request(base_url, f"/api/sources/{source_id}/index", method="POST")
+        print_job(base_url, job, wait)
+
+    run_api_command(command, base_url_from(ctx))
+
+
+@app.command()
+def delete(
+    ctx: typer.Context,
+    source_id: Annotated[str, typer.Argument(help="Source id to delete.")],
+) -> None:
+    """Delete a source."""
+    run_api_command(
+        lambda base_url: print_json(request(base_url, f"/api/sources/{source_id}", method="DELETE")),
+        base_url_from(ctx),
+    )
+
+
+def run_api_command(command: Callable[[str], None], base_url: str) -> None:
     try:
-        if args.command == "health":
-            print_json(request(base_url, "/api/health"))
-        elif args.command == "list":
-            print_list(request(base_url, "/api/sources"), args.output)
-        elif args.command == "search":
-            payload = request(
-                base_url,
-                "/api/sources/search",
-                method="POST",
-                body={
-                    "source": None if args.source == "all" else args.source,
-                    "query": args.query,
-                    "limit": args.limit,
-                    "mode": args.mode,
-                },
-            )
-            print_search(payload, args.output)
-        elif args.command == "index-local":
-            created = request(
-                base_url,
-                "/api/sources/local-folder",
-                method="POST",
-                body={"paths": args.paths, "name": args.name, "version": args.version},
-            )
-            job = request(base_url, f"/api/sources/{created['source']['id']}/index", method="POST")
-            print_job(base_url, job, args.wait)
-        elif args.command == "index-web":
-            created = request(
-                base_url,
-                "/api/sources/web",
-                method="POST",
-                body={
-                    "url": args.url,
-                    "name": args.name,
-                    "version": args.version,
-                    "max_depth": args.max_depth,
-                    "max_pages": args.max_pages,
-                    "scope": args.scope,
-                    "include_patterns": args.include_pattern,
-                    "exclude_patterns": args.exclude_pattern,
-                },
-            )
-            job = request(base_url, f"/api/sources/{created['source']['id']}/index", method="POST")
-            print_job(base_url, job, args.wait)
-        elif args.command == "reindex":
-            job = request(base_url, f"/api/sources/{args.source_id}/index", method="POST")
-            print_job(base_url, job, args.wait)
-        elif args.command == "delete":
-            print_json(request(base_url, f"/api/sources/{args.source_id}", method="DELETE"))
-        return 0
+        command(base_url)
     except RuntimeError as error:
         print(error, file=sys.stderr)
-        return 1
+        raise typer.Exit(code=1) from error
 
 
 def request(base_url: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> Any:
@@ -199,5 +278,9 @@ def print_job(base_url: str, payload: dict[str, Any], wait: bool) -> None:
         time.sleep(1)
 
 
+def main() -> None:
+    app()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
