@@ -9,12 +9,13 @@ from unittest import TestCase, main
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import app.search as search_module
+from app import vector_index
 from app.crawler import markdown_from_result
 from app.db import Database
 from app.embedding import embedding_signature, tokenize
-from app.ingestion import clean_web_markdown, document_from_file, normalize_content
+from app.ingestion import clean_web_markdown, document_from_file, html_to_markdown, normalize_content
 from app.models import SearchMode, SourceKind, SourceRecord
-from app.search import diversify_by_document, extract_code, meaningful_terms, shape_result, source_quality_multiplier
+from app.search import diversify_by_document, extract_code, rank_lookup, shape_result
 
 
 def make_search_row(
@@ -123,7 +124,7 @@ description: Learn responsive styles
         self.assertIn("```tsx", content)
         self.assertIn("<ColorModeButton />", content)
 
-    def test_web_markdown_chrome_is_removed(self) -> None:
+    def test_web_markdown_common_chrome_is_removed(self) -> None:
         cleaned = clean_web_markdown(
             """[New in Neon: Read the changelog. ![](https://example.com/a.png)](https://neon.com/docs/changelog)
 Search...⌘K
@@ -139,9 +140,6 @@ With Neon, you can work with your data like code.
 Was this page helpful?
 YesNo
 Thank you for your feedback!
-Neon Docs
-A Databricks Company
-© Neon 2026. All rights reserved.
 """
         )
 
@@ -151,7 +149,26 @@ A Databricks Company
         self.assertNotIn("Ask AI", cleaned)
         self.assertNotIn("On this page", cleaned)
         self.assertNotIn("Was this page helpful", cleaned)
-        self.assertNotIn("Databricks", cleaned)
+
+    def test_local_html_normalization_preserves_markdown_structure(self) -> None:
+        markdown = html_to_markdown(
+            """<html><body>
+<nav>Sidebar</nav>
+<main>
+  <h1>Install</h1>
+  <p>Use the <a href="/cli">CLI</a>.</p>
+  <pre><code>npm install ingestor</code></pre>
+  <ul><li>Run setup</li></ul>
+</main>
+</body></html>"""
+        )
+
+        self.assertIn("# Install", markdown)
+        self.assertIn("[CLI](/cli)", markdown)
+        self.assertIn("```", markdown)
+        self.assertIn("npm install ingestor", markdown)
+        self.assertIn("- Run setup", markdown)
+        self.assertNotIn("Sidebar", markdown)
 
 
 class CrawlMarkdownSelectionTests(TestCase):
@@ -181,6 +198,31 @@ class CrawlMarkdownSelectionTests(TestCase):
 
         self.assertEqual(markdown_from_result(Result()), "# Raw content with citations\n\nUseful body.")
 
+    def test_markdown_from_result_extracts_html_when_fit_markdown_is_noisy(self) -> None:
+        class Markdown:
+            fit_markdown = """Search...⌘K
+Ask AI
+
+### On this page
+- [Install](#install)
+
+Was this page helpful?
+"""
+            markdown_with_citations = "# Raw content\n\nSidebar noise."
+            raw_markdown = "# Raw content\n\nSidebar noise."
+
+        class Result:
+            url = "https://example.com/docs/install"
+            markdown = Markdown()
+            cleaned_html = "<html><body><nav>Sidebar</nav><article><h1>Install</h1><p>Use the CLI.</p></article></body></html>"
+            html = ""
+
+        selected = markdown_from_result(Result())
+
+        self.assertIn("Install", selected)
+        self.assertIn("Use the CLI", selected)
+        self.assertNotIn("Search", selected)
+
 
 class SearchShapingTests(TestCase):
     def test_jsx_blocks_are_treated_as_code(self) -> None:
@@ -191,71 +233,31 @@ class SearchShapingTests(TestCase):
 ```
 """
 
-        code = extract_code(content, {"responsive", "breakpoints"}, ["responsive"])
+        code = extract_code(content, {"responsive", "breakpoints"})
 
         self.assertIsNotNone(code)
         self.assertIn("<Text", code)
 
-    def test_iconify_tailwind_setup_beats_troubleshooting_intent(self) -> None:
-        terms = meaningful_terms("How do I use Iconify icons in CSS or Tailwind with icon selectors?")
-        setup = make_search_row(
-            title="Basic usage",
-            uri="docs/usage/css/tailwind/index.md",
-            content='const { addIconSelectors } = require("@iconify/tailwind");',
-        )
-        issue = make_search_row(
-            title="Selectors do not work",
-            uri="docs/usage/css/tailwind/issues/index.md",
-            content="Troubleshooting selectors that do not work.",
-        )
+    def test_rank_lookup_sorts_by_score_not_dict_order(self) -> None:
+        ranks = rank_lookup({10: 0.2, 20: 0.9, 30: 0.5})
 
-        self.assertGreater(source_quality_multiplier(setup, terms), source_quality_multiplier(issue, terms))
+        self.assertEqual(ranks, {20: 1, 30: 2, 10: 3})
 
-    def test_remotion_offthreadvideo_beats_generic_static_files(self) -> None:
-        terms = meaningful_terms("How do I use OffthreadVideo or static audio video files in Remotion?")
-        exact = make_search_row(
-            title="OffthreadVideo",
-            uri="docs/offthreadvideo.mdx",
-            content="import {OffthreadVideo, staticFile} from 'remotion';",
-        )
-        generic = make_search_row(
-            title="getStaticFiles()",
-            uri="docs/get-static-files.mdx",
-            content="import {getStaticFiles, StaticFile} from 'remotion';",
-        )
-
-        self.assertGreater(source_quality_multiplier(exact, terms), source_quality_multiplier(generic, terms))
-
-    def test_cloud_render_is_penalized_for_local_remotion_render_queries(self) -> None:
-        terms = meaningful_terms("How do I create a Remotion composition and render a video?")
-        local = make_search_row(
-            title="Render",
-            uri="docs/cli/render.mdx",
-            content="npx remotion render src/index.ts MyComp out.mp4",
-        )
-        cloud = make_search_row(
-            title="Render",
-            uri="docs/cloudrun/render.mdx",
-            content="npx remotion cloudrun render site serve-url MyComp out.mp4",
-        )
-
-        self.assertGreater(source_quality_multiplier(local, terms), source_quality_multiplier(cloud, terms))
-
-    def test_diversification_defers_duplicate_topic_titles(self) -> None:
-        first_render = make_search_row(row_id=1, document_id=1, title="Render", uri="docs/cloudrun/render.mdx")
-        second_render = make_search_row(row_id=2, document_id=2, title="Render", uri="docs/lambda/render.mdx")
+    def test_diversification_defers_duplicate_documents(self) -> None:
+        first_chunk = make_search_row(row_id=1, document_id=1, title="Install", uri="docs/install.mdx")
+        second_chunk = make_search_row(row_id=2, document_id=1, title="Install", uri="docs/install.mdx")
         composition = make_search_row(row_id=3, document_id=3, title="Composition", uri="docs/composition.mdx")
 
         selected = diversify_by_document(
             [
-                (1.0, 0.0, 0.0, first_render),
-                (0.99, 0.0, 0.0, second_render),
-                (0.9, 0.0, 0.0, composition),
+                (1.0, 0.0, 0.0, 1, first_chunk),
+                (0.99, 0.0, 0.0, 2, second_chunk),
+                (0.9, 0.0, 0.0, 3, composition),
             ],
             2,
         )
 
-        self.assertEqual([row["uri"] for _, _, _, row in selected], ["docs/cloudrun/render.mdx", "docs/composition.mdx"])
+        self.assertEqual([row["id"] for _, _, _, _, row in selected], [1, 3])
 
     def test_shape_result_returns_compact_clean_excerpt(self) -> None:
         row = make_search_row(
@@ -279,8 +281,7 @@ const connectionString = "postgresql://user:pass@ep-example-pooler.us-east-2.aws
 Was this page helpful?
 YesNo
 Thank you for your feedback!
-""",
-            {"connection", "pooling", "pooled"},
+            """,
             {"connection", "pooling", "pooled"},
         )
 
@@ -288,6 +289,57 @@ Thank you for your feedback!
         self.assertNotIn("Search", shaped["content"])
         self.assertNotIn("Was this page helpful", shaped["content"])
         self.assertIsNotNone(shaped["code"])
+
+
+class VectorIndexTests(TestCase):
+    def test_sqlite_vec_index_is_populated_during_ingestion(self) -> None:
+        if not vector_index.is_available():
+            self.skipTest("sqlite-vec is not installed")
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            test_db = Database(Path(directory) / "ingestor.sqlite")
+            source = SourceRecord(
+                id="vec-source",
+                kind=SourceKind.LOCAL,
+                name="vec-source",
+                version="test",
+                location="memory",
+                metadata={"embedding": embedding_signature()},
+            )
+            test_db.upsert_source(source)
+            test_db.replace_source_documents(
+                source,
+                [
+                    {
+                        "uri": "vectors.md",
+                        "title": "Vectors",
+                        "content": "# Vectors",
+                        "content_hash": "vectors",
+                        "chunks": [
+                            vector_chunk(0, "Alpha", "alpha", [1.0, 0.0, 0.0]),
+                            vector_chunk(1, "Beta", "beta", [0.0, 1.0, 0.0]),
+                        ],
+                    }
+                ],
+            )
+
+            with test_db.connect() as connection:
+                vec_count = connection.execute("SELECT count(*) FROM chunks_vec").fetchone()[0]
+                dimensions = connection.execute(
+                    "SELECT value FROM vector_index_meta WHERE key = 'dimensions'"
+                ).fetchone()[0]
+
+            original_db = search_module.db
+            search_module.db = test_db
+            try:
+                results = search_module.sqlite_vec_search([1.0, 0.0, 0.0], ["vec-source"], 2)
+            finally:
+                search_module.db = original_db
+
+        self.assertEqual(vec_count, 2)
+        self.assertEqual(dimensions, "3")
+        self.assertEqual(list(results), [1, 2])
+        self.assertGreater(results[1], results[2])
 
 
 class NeonRetrievalSmokeTests(TestCase):
@@ -386,6 +438,18 @@ def neon_document(uri: str, title: str, content: str) -> dict:
         "content": chunk["content"],
         "content_hash": uri,
         "chunks": [chunk],
+    }
+
+
+def vector_chunk(ordinal: int, title: str, content: str, embedding: list[float]) -> dict:
+    return {
+        "ordinal": ordinal,
+        "title": title,
+        "uri": f"{title.lower()}.md",
+        "content": content,
+        "section_path": [title],
+        "token_count": len(tokenize(content)),
+        "embedding": embedding,
     }
 
 

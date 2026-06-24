@@ -5,12 +5,13 @@ import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 
-from sqlalchemy import delete, event, func, inspect
+from sqlalchemy import delete, event, func, inspect, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.config import get_settings
 from app.db.models import AppSettingTable, ChunkTable, DocumentTable, JobTable, SourceTable, chunks_fts
 from app.models import JobRecord, JobStatus, SourceKind, SourceRecord, SourceStatus, utc_now
+from app import vector_index
 
 
 class Database:
@@ -29,12 +30,14 @@ class Database:
             cursor.execute("PRAGMA foreign_keys = ON")
             cursor.execute("PRAGMA journal_mode = WAL")
             cursor.close()
+            vector_index.load(dbapi_connection)
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA journal_mode = WAL")
+        vector_index.load(connection)
         return connection
 
     def initialize(self) -> None:
@@ -45,6 +48,14 @@ class Database:
                 """
                 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts
                 USING fts5(source_id UNINDEXED, title, uri, content)
+                """
+            )
+            connection.exec_driver_sql(
+                f"""
+                CREATE TABLE IF NOT EXISTS {vector_index.VECTOR_INDEX_META_TABLE} (
+                  key TEXT PRIMARY KEY,
+                  value TEXT NOT NULL
+                )
                 """
             )
         self._ensure_column("chunks", "section_path", "TEXT NOT NULL DEFAULT '[]'")
@@ -260,6 +271,7 @@ class Database:
         chunk_ids = session.exec(select(ChunkTable.id).where(ChunkTable.source_id == source_id)).all()
         if chunk_ids:
             session.execute(chunks_fts.delete().where(chunks_fts.c.rowid.in_(chunk_ids)))
+            self._delete_vector_rows(session, [int(chunk_id) for chunk_id in chunk_ids if chunk_id is not None])
 
     def _insert_document(self, session: Session, source_id: str, document: dict) -> int:
         document_row = DocumentTable(
@@ -292,6 +304,7 @@ class Database:
             session.flush()
             if chunk_row.id is None:
                 raise RuntimeError("Chunk insert did not return an id")
+            self._insert_vector_row(session, chunk_row.id, source_id, chunk["embedding"])
             session.execute(
                 chunks_fts.insert().values(
                     rowid=chunk_row.id,
@@ -303,6 +316,38 @@ class Database:
             )
             chunk_count += 1
         return chunk_count
+
+    def _insert_vector_row(self, session: Session, chunk_id: int, source_id: str, embedding: object) -> None:
+        vector = vector_index.parse_embedding(embedding)
+        if vector is None:
+            return
+        connection = session.connection().connection.driver_connection
+        if not vector_index.ensure_index_table(connection, len(vector)):
+            return
+        serialized = vector_index.serialize(vector)
+        if serialized is None:
+            return
+        session.execute(
+            text(
+                f"""
+                INSERT OR REPLACE INTO {vector_index.CHUNKS_VEC_TABLE} (rowid, source_id, embedding)
+                VALUES (:rowid, :source_id, :embedding)
+                """
+            ),
+            {"rowid": chunk_id, "source_id": source_id, "embedding": serialized},
+        )
+
+    def _delete_vector_rows(self, session: Session, chunk_ids: list[int]) -> None:
+        if not chunk_ids or not vector_index.is_available():
+            return
+        connection = session.connection().connection.driver_connection
+        if not vector_index.table_exists(connection, vector_index.CHUNKS_VEC_TABLE):
+            return
+        for chunk_id in chunk_ids:
+            session.execute(
+                text(f"DELETE FROM {vector_index.CHUNKS_VEC_TABLE} WHERE rowid = :rowid"),
+                {"rowid": chunk_id},
+            )
 
     def _source_from_table(self, row: SourceTable) -> SourceRecord:
         return SourceRecord(

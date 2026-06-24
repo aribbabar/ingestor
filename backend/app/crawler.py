@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from collections.abc import AsyncIterator
 
+from app.content import extract_main_markdown, has_obvious_web_chrome, html_to_markdown
 from app.ingestion import document_from_web_page
 
 
@@ -194,7 +195,35 @@ def markdown_from_result(result: object) -> str:
     fit = getattr(markdown, "fit_markdown", None)
     cited = getattr(markdown, "markdown_with_citations", None)
     raw = getattr(markdown, "raw_markdown", None)
-    return fit or cited or raw or getattr(result, "cleaned_html", "") or getattr(result, "html", "") or ""
+    if fit:
+        if not has_obvious_web_chrome(fit):
+            return fit
+        extracted = markdown_from_result_html(result)
+        if extracted:
+            return extracted
+        return fit
+
+    crawl_markdown = cited or raw or ""
+    if crawl_markdown and not has_obvious_web_chrome(crawl_markdown):
+        return crawl_markdown
+
+    extracted = markdown_from_result_html(result)
+    if extracted:
+        return extracted
+    return crawl_markdown
+
+
+def markdown_from_result_html(result: object) -> str:
+    result_url = str(getattr(result, "url", "") or "")
+    html = str(getattr(result, "cleaned_html", "") or getattr(result, "html", "") or "")
+    if html:
+        extracted = extract_main_markdown(html, url=result_url)
+        if extracted:
+            return extracted
+        fallback_markdown = html_to_markdown(html)
+        if fallback_markdown:
+            return fallback_markdown
+    return ""
 
 
 def root_domain(host: str) -> str:
