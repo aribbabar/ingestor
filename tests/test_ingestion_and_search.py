@@ -9,6 +9,7 @@ from unittest import TestCase, main
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import app.search as search_module
+from app.crawler import markdown_from_result
 from app.database import Database
 from app.embedding import embedding_signature, tokenize
 from app.ingestion import clean_web_markdown, document_from_file, normalize_content
@@ -151,6 +152,34 @@ A Databricks Company
         self.assertNotIn("On this page", cleaned)
         self.assertNotIn("Was this page helpful", cleaned)
         self.assertNotIn("Databricks", cleaned)
+
+
+class CrawlMarkdownSelectionTests(TestCase):
+    def test_markdown_from_result_prefers_fit_markdown(self) -> None:
+        class Markdown:
+            fit_markdown = "# Focused content\n\nUseful body."
+            markdown_with_citations = "# Raw content with citations\n\nSidebar noise."
+            raw_markdown = "# Raw content\n\nSidebar noise."
+
+        class Result:
+            markdown = Markdown()
+            cleaned_html = "<main>Fallback</main>"
+            html = "<html>Fallback</html>"
+
+        self.assertEqual(markdown_from_result(Result()), "# Focused content\n\nUseful body.")
+
+    def test_markdown_from_result_falls_back_when_fit_markdown_is_empty(self) -> None:
+        class Markdown:
+            fit_markdown = ""
+            markdown_with_citations = "# Raw content with citations\n\nUseful body."
+            raw_markdown = "# Raw content\n\nUseful body."
+
+        class Result:
+            markdown = Markdown()
+            cleaned_html = "<main>Fallback</main>"
+            html = "<html>Fallback</html>"
+
+        self.assertEqual(markdown_from_result(Result()), "# Raw content with citations\n\nUseful body.")
 
 
 class SearchShapingTests(TestCase):

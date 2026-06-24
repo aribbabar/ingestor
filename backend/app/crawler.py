@@ -66,6 +66,7 @@ async def crawl_with_crawl4ai(
     exclude_patterns: list[str],
 ) -> AsyncIterator[dict]:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
+    from crawl4ai.content_filter_strategy import PruningContentFilter
     from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
     from crawl4ai.deep_crawling.filters import ContentTypeFilter, DomainFilter, FilterChain, URLPatternFilter
     from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
@@ -94,8 +95,17 @@ async def crawl_with_crawl4ai(
     run_config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
         deep_crawl_strategy=strategy if max_depth > 0 else None,
-        markdown_generator=DefaultMarkdownGenerator(options={"citations": True}),
+        markdown_generator=DefaultMarkdownGenerator(
+            content_filter=PruningContentFilter(
+                threshold=0.45,
+                threshold_type="dynamic",
+                min_word_threshold=5,
+            ),
+            options={"citations": True},
+        ),
         stream=True,
+        word_count_threshold=5,
+        excluded_tags=["nav", "footer", "header"],
         exclude_external_links=True,
         exclude_social_media_links=True,
     )
@@ -181,9 +191,10 @@ def markdown_from_result(result: object) -> str:
     markdown = getattr(result, "markdown", "")
     if isinstance(markdown, str):
         return markdown
+    fit = getattr(markdown, "fit_markdown", None)
     cited = getattr(markdown, "markdown_with_citations", None)
     raw = getattr(markdown, "raw_markdown", None)
-    return cited or raw or getattr(result, "cleaned_html", "") or getattr(result, "html", "") or ""
+    return fit or cited or raw or getattr(result, "cleaned_html", "") or getattr(result, "html", "") or ""
 
 
 def root_domain(host: str) -> str:
