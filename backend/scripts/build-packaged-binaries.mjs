@@ -44,8 +44,8 @@ run(python, [
   "--collect-submodules",
   "app",
   "--name",
-  "ingestor-backend",
-  join(backendDir, "app", "packaged_backend.py"),
+  "ingestor-daemon",
+  join(backendDir, "app", "daemon", "server.py"),
 ]);
 
 run(python, [
@@ -54,7 +54,7 @@ run(python, [
   ...commonOutputArgs,
   "--name",
   "ingestor",
-  join(backendDir, "app", "installed_cli.py"),
+  join(backendDir, "app", "cli", "main.py"),
 ]);
 
 function resolvePython() {

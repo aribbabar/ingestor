@@ -13,9 +13,9 @@ use tauri::{AppHandle, Emitter, Manager};
 const BACKEND_HOST: &str = "127.0.0.1";
 const BACKEND_PORT: u16 = 8765;
 const BACKEND_BINARY_NAME: &str = if cfg!(windows) {
-    "ingestor-backend.exe"
+    "ingestor-daemon.exe"
 } else {
-    "ingestor-backend"
+    "ingestor-daemon"
 };
 
 #[derive(Default)]
@@ -179,8 +179,7 @@ fn start_backend(app: &AppHandle) -> Result<(), String> {
         command
             .args([
                 "-m",
-                "uvicorn",
-                "app.main:app",
+                "app.daemon",
                 "--host",
                 BACKEND_HOST,
                 "--port",

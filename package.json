@@ -8,6 +8,6 @@
     "build": "npm --prefix frontend run tauri -- build",
     "frontend:dev": "npm --prefix frontend run dev -- --host 127.0.0.1 --port 1420 --strictPort",
     "frontend:build": "npm --prefix frontend run build",
-    "backend:serve": "backend\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8765"
+    "backend:serve": "backend\\.venv\\Scripts\\python.exe -m app.daemon --host 127.0.0.1 --port 8765 --reload"
   }
 }

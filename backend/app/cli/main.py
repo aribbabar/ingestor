@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
-import urllib.error
-import urllib.request
 from enum import StrEnum
 from typing import Annotated, Any, Callable
 
 import typer
 
+from app.cli.client import ApiConnectionError, ApiError, DEFAULT_BASE_URL, ensure_daemon, request
+from app.cli.output import print_json, print_list, print_search
 from app.domain.models import SearchMode
 
-DEFAULT_BASE_URL = "http://127.0.0.1:8765"
 FINAL_JOB_STATUSES = {"succeeded", "completed", "failed"}
 
 
@@ -28,7 +26,13 @@ class CrawlScope(StrEnum):
     DOMAIN = "domain"
 
 
-app = typer.Typer(help="Call a running Ingestor backend API.")
+class CliConfig:
+    def __init__(self, base_url: str, start_daemon: bool) -> None:
+        self.base_url = base_url
+        self.start_daemon = start_daemon
+
+
+app = typer.Typer(help="Call a running Ingestor daemon API.")
 
 
 @app.callback()
@@ -41,18 +45,21 @@ def configure(
             help="Base URL for the running Ingestor API.",
         ),
     ] = os.environ.get("INGESTOR_API_URL", DEFAULT_BASE_URL),
+    start_daemon: Annotated[
+        bool,
+        typer.Option(
+            envvar="INGESTOR_AUTO_START",
+            help="Start the local daemon if the API is not reachable.",
+        ),
+    ] = False,
 ) -> None:
-    ctx.obj = {"base_url": api_url.rstrip("/")}
-
-
-def base_url_from(ctx: typer.Context) -> str:
-    return str(ctx.obj["base_url"])
+    ctx.obj = CliConfig(base_url=api_url.rstrip("/"), start_daemon=start_daemon)
 
 
 @app.command()
 def health(ctx: typer.Context) -> None:
-    """Check API health."""
-    run_api_command(lambda base_url: print_json(request(base_url, "/api/health")), base_url_from(ctx))
+    """Check daemon health."""
+    run_api_command(lambda base_url: print_json(request(base_url, "/api/health")), config_from(ctx))
 
 
 @app.command("list")
@@ -61,7 +68,7 @@ def list_sources(
     output: Annotated[TextOutputFormat, typer.Option(help="Output format.")] = TextOutputFormat.TEXT,
 ) -> None:
     """List indexed sources."""
-    run_api_command(lambda base_url: print_list(request(base_url, "/api/sources"), output.value), base_url_from(ctx))
+    run_api_command(lambda base_url: print_list(request(base_url, "/api/sources"), output.value), config_from(ctx))
 
 
 @app.command()
@@ -73,7 +80,7 @@ def search(
     mode: Annotated[SearchMode | None, typer.Option(help="Retrieval mode.")] = None,
     output: Annotated[TextOutputFormat, typer.Option(help="Output format.")] = TextOutputFormat.TEXT,
 ) -> None:
-    """Search through the running API."""
+    """Search indexed documentation through the daemon."""
 
     def command(base_url: str) -> None:
         payload = request(
@@ -89,7 +96,7 @@ def search(
         )
         print_search(payload, output.value)
 
-    run_api_command(command, base_url_from(ctx))
+    run_api_command(command, config_from(ctx))
 
 
 @app.command()
@@ -100,7 +107,7 @@ def index_local(
     version: Annotated[str, typer.Option(help="Source version label.")] = "latest",
     wait: Annotated[bool, typer.Option(help="Wait for indexing to finish.")] = False,
 ) -> None:
-    """Register and index local documentation through the API."""
+    """Register and index local documentation through the daemon."""
 
     def command(base_url: str) -> None:
         created = request(
@@ -112,7 +119,7 @@ def index_local(
         job = request(base_url, f"/api/sources/{created['source']['id']}/index", method="POST")
         print_job(base_url, job, wait)
 
-    run_api_command(command, base_url_from(ctx))
+    run_api_command(command, config_from(ctx))
 
 
 @app.command()
@@ -132,7 +139,7 @@ def index_web(
     ] = None,
     wait: Annotated[bool, typer.Option(help="Wait for indexing to finish.")] = False,
 ) -> None:
-    """Register and index web documentation through the API."""
+    """Register and index web documentation through the daemon."""
 
     def command(base_url: str) -> None:
         created = request(
@@ -153,7 +160,7 @@ def index_web(
         job = request(base_url, f"/api/sources/{created['source']['id']}/index", method="POST")
         print_job(base_url, job, wait)
 
-    run_api_command(command, base_url_from(ctx))
+    run_api_command(command, config_from(ctx))
 
 
 @app.command()
@@ -168,7 +175,7 @@ def reindex(
         job = request(base_url, f"/api/sources/{source_id}/index", method="POST")
         print_job(base_url, job, wait)
 
-    run_api_command(command, base_url_from(ctx))
+    run_api_command(command, config_from(ctx))
 
 
 @app.command()
@@ -179,93 +186,49 @@ def delete(
     """Delete a source."""
     run_api_command(
         lambda base_url: print_json(request(base_url, f"/api/sources/{source_id}", method="DELETE")),
-        base_url_from(ctx),
+        config_from(ctx),
     )
 
 
-def run_api_command(command: Callable[[str], None], base_url: str) -> None:
-    try:
-        command(base_url)
-    except RuntimeError as error:
-        print(error, file=sys.stderr)
-        raise typer.Exit(code=1) from error
+@app.command()
+def daemon(
+    host: Annotated[str, typer.Option(help="Host interface to bind.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to bind.")] = 8765,
+    reload: Annotated[bool, typer.Option(help="Reload on source changes.")] = False,
+) -> None:
+    """Run the local Ingestor daemon."""
+    from app.daemon.server import serve
+
+    serve(host=host, port=port, reload=reload)
 
 
-def request(base_url: str, path: str, method: str = "GET", body: dict[str, Any] | None = None) -> Any:
-    data = json.dumps(body).encode("utf-8") if body is not None else None
-    request_object = urllib.request.Request(
-        f"{base_url}{path}",
-        data=data,
-        method=method,
-        headers={"content-type": "application/json"} if body is not None else {},
-    )
+def config_from(ctx: typer.Context) -> CliConfig:
+    return ctx.obj
+
+
+def run_api_command(command: Callable[[str], None], config: CliConfig) -> None:
     try:
-        with urllib.request.urlopen(request_object, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8")
+        command(config.base_url)
+    except ApiConnectionError as error:
+        if not config.start_daemon:
+            print(f"{error} Start the Ingestor desktop app, run `ingestor daemon`, or pass --start-daemon.", file=sys.stderr)
+            raise typer.Exit(code=1) from error
         try:
-            detail = json.loads(detail).get("detail", detail)
-        except json.JSONDecodeError:
-            pass
-        raise RuntimeError(f"Ingestor API error {error.code}: {detail}") from error
-    except urllib.error.URLError as error:
-        raise RuntimeError(f"Could not reach Ingestor at {base_url}. Start the Ingestor desktop app and try again.") from error
-
-
-def print_json(payload: Any) -> None:
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
-
-
-def print_list(payload: dict[str, Any], output: str) -> None:
-    if output == "json":
-        print_json(payload)
-        return
-    sources = payload.get("sources", [])
-    if not sources:
-        print("No indexed sources.")
-        return
-    for source in sources:
-        print(f"{source['name']} ({source['id']})")
-        print(f"  {source['kind']} {source['status']} docs={source['document_count']} chunks={source['chunk_count']}")
-        print(f"  {source['location']}")
-
-
-def print_search(payload: dict[str, Any], output: str) -> None:
-    if output == "json":
-        print_json(payload)
-        return
-    results = payload.get("results", [])
-    if not results:
-        print("No results.")
-        return
-    for index, result in enumerate(results, start=1):
-        summary = normalize_text(result.get("summary") or result.get("content") or "")[:700]
-        print(f"### {index}. {result.get('title') or 'Untitled'}")
-        print(f"Source: {result.get('uri') or result.get('source_name') or result.get('source_id')}")
-        print(f"Score: {float(result.get('score') or 0):.3f}")
-        if summary:
-            print()
-            print(summary)
-        if result.get("code"):
-            print()
-            print("```")
-            print(str(result["code"]).strip())
-            print("```")
-        if index < len(results):
-            print()
-            print("---")
-            print()
-
-
-def normalize_text(value: Any) -> str:
-    return " ".join(str(value or "").split())
+            ensure_daemon(config.base_url)
+            command(config.base_url)
+        except ApiError as retry_error:
+            print(str(retry_error), file=sys.stderr)
+            raise typer.Exit(code=1) from retry_error
+    except ApiError as error:
+        print(str(error), file=sys.stderr)
+        raise typer.Exit(code=1) from error
 
 
 def print_job(base_url: str, payload: dict[str, Any], wait: bool) -> None:
     if not wait:
         print_json(payload)
         return
+
     last_log_count = 0
     while True:
         status = request(base_url, f"/api/sources/jobs/{payload['job']['id']}")
@@ -291,4 +254,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
