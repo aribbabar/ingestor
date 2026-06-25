@@ -1,5 +1,5 @@
 ---
-name: ingestor-docs-search
+name: ingestor-search
 description: >-
   Search and query the local Ingestor documentation index. Use when an agent
   needs to look up indexed documentation, inspect available sources, or retrieve
@@ -21,7 +21,7 @@ the local Ingestor API and do not modify indexed sources.
 - You need agent-readable snippets with source URIs and relevance scores.
 
 Always run `list` first if you are unsure whether a source has been indexed.
-If the source is missing, use the **ingestor-docs-manage** skill to index it.
+If the source is missing, use the **ingestor-manage** skill to index it.
 
 ## Commands
 

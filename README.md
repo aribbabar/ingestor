@@ -82,8 +82,8 @@ uvx ingestor search all "query" --output json
 
 The `skills` folder contains app-owned skills that make agents use Ingestor through the CLI:
 
-- `ingestor-docs-search` searches indexed documentation.
-- `ingestor-docs-manage` indexes local or web documentation.
+- `ingestor-search` searches indexed documentation.
+- `ingestor-manage` indexes local or web documentation.
 
 The desktop app can sync these skills into supported local agent skill folders. The skills stay thin on purpose: they describe when to call `ingestor`, while the installed app and daemon own the actual indexing and retrieval behavior.
 

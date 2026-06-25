@@ -1,5 +1,5 @@
 ---
-name: ingestor-docs-manage
+name: ingestor-manage
 description: >-
   Manage the local Ingestor documentation index. Use to index local folders or
   files, crawl web documentation, refresh sources, and prepare docs for
@@ -12,7 +12,7 @@ metadata:
 # Ingestor Docs Manage
 
 Index documentation into Ingestor so agents can retrieve it later with the
-**ingestor-docs-search** skill.
+**ingestor-search** skill.
 
 ## When to use
 
