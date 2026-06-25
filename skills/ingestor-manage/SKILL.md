@@ -23,8 +23,8 @@ Index documentation into Ingestor so agents can retrieve it later with the
 ## Commands
 
 Use the `ingestor` CLI command. If it is not installed but the Python package
-is available, run the same commands with `uvx ingestor ...`. If these calls
-fail, open the Ingestor desktop app, run `ingestor daemon`, or use
+is available, run the same commands with `uvx --from ingestor-docs ingestor ...`.
+If these calls fail, open the Ingestor desktop app, run `ingestor daemon`, or use
 `ingestor --start-daemon ...` so the local daemon is available.
 
 ### index-local

@@ -1,8 +1,20 @@
 [project]
-name = "ingestor"
+name = "ingestor-docs"
 version = "0.1.0"
 description = "Standalone documentation ingestion, indexing, and retrieval for local agents."
+readme = "README.md"
 requires-python = ">=3.12"
+keywords = ["agents", "documentation", "retrieval", "search", "tauri"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Documentation",
+  "Topic :: Software Development :: Documentation",
+]
 dependencies = [
   "fastapi[standard]>=0.115",
   "uvicorn[standard]>=0.30",
@@ -20,6 +32,15 @@ dependencies = [
 [project.scripts]
 ingestor = "app.cli:main"
 ingestor-daemon = "app.daemon:main"
+
+[project.urls]
+Homepage = "https://github.com/aribbabar/ingestor"
+Repository = "https://github.com/aribbabar/ingestor"
+Issues = "https://github.com/aribbabar/ingestor/issues"
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
