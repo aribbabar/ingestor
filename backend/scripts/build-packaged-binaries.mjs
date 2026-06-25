@@ -34,6 +34,7 @@ run(python, [
   "-m",
   "PyInstaller",
   ...commonOutputArgs,
+  ...(isWindows ? ["--noconsole"] : []),
   "--paths",
   backendDir,
   "--collect-all",

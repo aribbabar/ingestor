@@ -38,7 +38,7 @@ ingestor list
 ingestor search all "query" --output json
 ```
 
-The NSIS installer adds the installed `binaries` directory to the current user's `PATH` so new terminal sessions can run `ingestor`. The desktop app must be running because the installed CLI talks to the local API at `http://127.0.0.1:8765`. Use `INGESTOR_API_URL` or `--api-url` to point the CLI at a different Ingestor API.
+The NSIS installer asks whether to add the installed `binaries` directory to the current user's `PATH`; the default answer is yes so new terminal sessions can run `ingestor`. The desktop app must be running because the installed CLI talks to the local API at `http://127.0.0.1:8765`. Use `INGESTOR_API_URL` or `--api-url` to point the CLI at a different Ingestor API.
 
 ## Backend CLI
 
