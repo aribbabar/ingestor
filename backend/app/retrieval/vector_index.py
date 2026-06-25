@@ -5,10 +5,19 @@ import sqlite3
 from collections.abc import Sequence
 
 import sqlite_vec
+from sqlalchemy import Column, Integer, LargeBinary, MetaData, String, Table
 
 CHUNKS_VEC_TABLE = "chunks_vec"
 VECTOR_INDEX_META_TABLE = "vector_index_meta"
 VECTOR_INDEX_DIMENSIONS_KEY = "dimensions"
+
+chunks_vec = Table(
+    CHUNKS_VEC_TABLE,
+    MetaData(),
+    Column("rowid", Integer, primary_key=True),
+    Column("source_id", String),
+    Column("embedding", LargeBinary),
+)
 
 
 def load(connection: sqlite3.Connection) -> None:
@@ -107,6 +116,59 @@ def ensure_index_table(connection: sqlite3.Connection, dimensions: int) -> None:
         raise ValueError("Vector index dimensions must be positive")
     if not table_exists(connection, CHUNKS_VEC_TABLE) or current_dimensions(connection) != dimensions:
         create_index_table(connection, dimensions)
+
+
+def insert_row(session: object, chunk_id: int, source_id: str, embedding: object) -> None:
+    vector = parse_embedding(embedding)
+    if vector is None:
+        return
+    ensure_index_table(driver_connection(session), len(vector))
+    session.execute(
+        chunks_vec.insert().prefix_with("OR REPLACE").values(
+            rowid=chunk_id,
+            source_id=source_id,
+            embedding=serialize(vector),
+        )
+    )
+
+
+def delete_rows(session: object, chunk_ids: Sequence[int]) -> None:
+    ids = list(chunk_ids)
+    if not ids:
+        return
+    if not table_exists(driver_connection(session), CHUNKS_VEC_TABLE):
+        return
+    session.execute(chunks_vec.delete().where(chunks_vec.c.rowid.in_(ids)))
+
+
+def rebuild(session: object, rows: Sequence[tuple[int, str, object]]) -> None:
+    vectors: list[tuple[int, str, list[float]]] = []
+    dimensions: int | None = None
+    for chunk_id, source_id, embedding in rows:
+        vector = parse_embedding(embedding)
+        if vector is None:
+            continue
+        if dimensions is None:
+            dimensions = len(vector)
+        if len(vector) == dimensions:
+            vectors.append((chunk_id, source_id, vector))
+    if dimensions is None:
+        return
+
+    ensure_index_table(driver_connection(session), dimensions)
+    session.execute(chunks_vec.delete())
+    for chunk_id, source_id, vector in vectors:
+        session.execute(
+            chunks_vec.insert().prefix_with("OR REPLACE").values(
+                rowid=chunk_id,
+                source_id=source_id,
+                embedding=serialize(vector),
+            )
+        )
+
+
+def driver_connection(session: object) -> sqlite3.Connection:
+    return session.connection().connection.driver_connection
 
 
 def query(

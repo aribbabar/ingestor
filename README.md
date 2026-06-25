@@ -20,7 +20,17 @@ npm run build
 
 The active app code lives in `frontend`, `backend`, and `skills`. The `reference` folder is only a source reference and can be removed once this Tauri version has everything you need.
 
-The Tauri bundle includes the backend source and app-owned skills as resources. A fully standalone installer still needs a packaged Python backend binary or embedded runtime; the current launcher uses the local backend virtualenv in development and falls back to `python.exe` in installed builds.
+The Tauri bundle includes a packaged backend executable, the `ingestor` CLI, and app-owned skills as resources. The installed desktop app starts `ingestor-backend.exe` locally and stores data in the app data directory.
+
+## Installed CLI
+
+```powershell
+ingestor health
+ingestor list
+ingestor search all "query" --output json
+```
+
+The NSIS installer adds the installed `binaries` directory to the current user's `PATH` so new terminal sessions can run `ingestor`. The desktop app must be running because the installed CLI talks to the local API at `http://127.0.0.1:8765`. Use `INGESTOR_API_URL` or `--api-url` to point the CLI at a different Ingestor API.
 
 ## Backend CLI
 

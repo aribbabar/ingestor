@@ -14,6 +14,7 @@ import typer
 from app.domain.models import SearchMode
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8765"
+FINAL_JOB_STATUSES = {"succeeded", "completed", "failed"}
 
 
 class TextOutputFormat(StrEnum):
@@ -268,14 +269,20 @@ def print_job(base_url: str, payload: dict[str, Any], wait: bool) -> None:
     last_log_count = 0
     while True:
         status = request(base_url, f"/api/sources/jobs/{payload['job']['id']}")
-        logs = status.get("logs", [])
+        logs = job_log_lines(status.get("logs", []))
         for line in logs[last_log_count:]:
             print(line)
         last_log_count = len(logs)
-        if status["job"]["status"] in {"completed", "failed"}:
+        if status["job"]["status"] in FINAL_JOB_STATUSES:
             print_json(status)
             return
         time.sleep(1)
+
+
+def job_log_lines(logs: Any) -> list[str]:
+    if isinstance(logs, str):
+        return logs.splitlines()
+    return list(logs)
 
 
 def main() -> None:

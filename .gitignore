@@ -15,6 +15,7 @@ __pycache__/
 venv/
 backend/.venv/
 backend/data/
+backend/build/
 
 # Node/Vite
 node_modules/
@@ -27,6 +28,7 @@ frontend/dist/
 target/
 frontend/src-tauri/gen/
 frontend/src-tauri/target/
+frontend/src-tauri/binaries/
 
 # Local environment and logs
 .env

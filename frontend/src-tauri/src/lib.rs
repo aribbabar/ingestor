@@ -12,6 +12,11 @@ use tauri::{AppHandle, Emitter, Manager};
 
 const BACKEND_HOST: &str = "127.0.0.1";
 const BACKEND_PORT: u16 = 8765;
+const BACKEND_BINARY_NAME: &str = if cfg!(windows) {
+    "ingestor-backend.exe"
+} else {
+    "ingestor-backend"
+};
 
 #[derive(Default)]
 struct BackendProcess(Mutex<Option<Child>>);
@@ -20,9 +25,28 @@ impl Drop for BackendProcess {
     fn drop(&mut self) {
         if let Ok(mut process) = self.0.lock() {
             if let Some(child) = process.as_mut() {
-                let _ = child.kill();
+                terminate_backend_process(child);
             }
         }
+    }
+}
+
+fn terminate_backend_process(child: &mut Child) {
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        let _ = child.wait();
+        return;
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }
 
@@ -82,15 +106,23 @@ fn wait_for_backend(timeout: Duration) -> Result<(), String> {
     Err(format!("Backend did not become ready at {}", backend_url()))
 }
 
-fn resolve_backend_dir(app: &AppHandle) -> Result<PathBuf, String> {
+fn resolve_dev_backend_dir() -> PathBuf {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    manifest_dir.join("..").join("..").join("backend")
+}
+
+fn resolve_backend_executable(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Ok(path) = env::var("INGESTOR_BACKEND") {
+        return Ok(PathBuf::from(path));
+    }
+
     if cfg!(debug_assertions) {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        return Ok(manifest_dir.join("..").join("..").join("backend"));
+        return Err("Packaged backend executable is not used in development.".to_string());
     }
 
     app.path()
         .resource_dir()
-        .map(|path| path.join("backend"))
+        .map(|path| path.join("binaries").join(BACKEND_BINARY_NAME))
         .map_err(|error| format!("Could not resolve resource directory: {error}"))
 }
 
@@ -133,8 +165,6 @@ fn start_backend(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let backend_dir = resolve_backend_dir(app)?;
-    let python = resolve_python(&backend_dir);
     let data_dir = app
         .path()
         .app_data_dir()
@@ -142,18 +172,35 @@ fn start_backend(app: &AppHandle) -> Result<(), String> {
         .join("data");
     let skills_dir = resolve_skills_dir(app)?;
 
-    let mut command = Command::new(python);
-    command
-        .args([
-            "-m",
-            "uvicorn",
-            "app.main:app",
+    let mut command = if cfg!(debug_assertions) {
+        let backend_dir = resolve_dev_backend_dir();
+        let python = resolve_python(&backend_dir);
+        let mut command = Command::new(python);
+        command
+            .args([
+                "-m",
+                "uvicorn",
+                "app.main:app",
+                "--host",
+                BACKEND_HOST,
+                "--port",
+                &BACKEND_PORT.to_string(),
+            ])
+            .current_dir(backend_dir);
+        command
+    } else {
+        let backend_executable = resolve_backend_executable(app)?;
+        let mut command = Command::new(backend_executable);
+        command.args([
             "--host",
             BACKEND_HOST,
             "--port",
             &BACKEND_PORT.to_string(),
-        ])
-        .current_dir(backend_dir)
+        ]);
+        command
+    };
+
+    command
         .env("INGESTOR_DATA_DIR", data_dir)
         .env("INGESTOR_SKILLS_DIR", skills_dir);
 

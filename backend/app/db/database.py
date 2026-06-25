@@ -5,7 +5,7 @@ import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
 
-from sqlalchemy import delete, event, func, inspect, text
+from sqlalchemy import delete, event, func, inspect
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.core.config import get_settings
@@ -50,14 +50,7 @@ class Database:
                 USING fts5(source_id UNINDEXED, title, uri, content)
                 """
             )
-            connection.exec_driver_sql(
-                f"""
-                CREATE TABLE IF NOT EXISTS {vector_index.VECTOR_INDEX_META_TABLE} (
-                  key TEXT PRIMARY KEY,
-                  value TEXT NOT NULL
-                )
-                """
-            )
+            vector_index.ensure_meta_table(connection.connection.driver_connection)
         self._ensure_column("chunks", "section_path", "TEXT NOT NULL DEFAULT '[]'")
         self._ensure_vector_index()
 
@@ -305,7 +298,7 @@ class Database:
             session.flush()
             if chunk_row.id is None:
                 raise RuntimeError("Chunk insert did not return an id")
-            self._insert_vector_row(session, chunk_row.id, source_id, chunk["embedding"])
+            vector_index.insert_row(session, chunk_row.id, source_id, chunk["embedding"])
             session.execute(
                 chunks_fts.insert().values(
                     rowid=chunk_row.id,
@@ -318,60 +311,15 @@ class Database:
             chunk_count += 1
         return chunk_count
 
-    def _insert_vector_row(self, session: Session, chunk_id: int, source_id: str, embedding: object) -> None:
-        vector = vector_index.parse_embedding(embedding)
-        if vector is None:
-            return
-        connection = session.connection().connection.driver_connection
-        vector_index.ensure_index_table(connection, len(vector))
-        serialized = vector_index.serialize(vector)
-        session.execute(
-            text(
-                f"""
-                INSERT OR REPLACE INTO {vector_index.CHUNKS_VEC_TABLE} (rowid, source_id, embedding)
-                VALUES (:rowid, :source_id, :embedding)
-                """
-            ),
-            {"rowid": chunk_id, "source_id": source_id, "embedding": serialized},
-        )
-
     def _delete_vector_rows(self, session: Session, chunk_ids: list[int]) -> None:
-        if not chunk_ids:
-            return
-        connection = session.connection().connection.driver_connection
-        if not vector_index.table_exists(connection, vector_index.CHUNKS_VEC_TABLE):
-            return
-        for chunk_id in chunk_ids:
-            session.execute(
-                text(f"DELETE FROM {vector_index.CHUNKS_VEC_TABLE} WHERE rowid = :rowid"),
-                {"rowid": chunk_id},
-            )
+        vector_index.delete_rows(session, chunk_ids)
 
     def _ensure_vector_index(self) -> None:
-        with self.connect() as connection:
-            rows = connection.execute("SELECT id, source_id, embedding FROM chunks").fetchall()
-            vectors: list[tuple[int, str, list[float]]] = []
-            dimensions: int | None = None
-            for row in rows:
-                vector = vector_index.parse_embedding(row["embedding"])
-                if vector is None:
-                    continue
-                if dimensions is None:
-                    dimensions = len(vector)
-                if len(vector) == dimensions:
-                    vectors.append((int(row["id"]), str(row["source_id"]), vector))
-            if dimensions is None:
-                return
-            vector_index.ensure_index_table(connection, dimensions)
-            for chunk_id, source_id, vector in vectors:
-                connection.execute(
-                    f"""
-                    INSERT OR REPLACE INTO {vector_index.CHUNKS_VEC_TABLE} (rowid, source_id, embedding)
-                    VALUES (?, ?, ?)
-                    """,
-                    (chunk_id, source_id, vector_index.serialize(vector)),
-                )
-            connection.commit()
+        with Session(self.engine) as session:
+            rows = session.exec(select(ChunkTable.id, ChunkTable.source_id, ChunkTable.embedding)).all()
+            vector_rows = [(int(chunk_id), str(source_id), embedding) for chunk_id, source_id, embedding in rows]
+            vector_index.rebuild(session, vector_rows)
+            session.commit()
 
     def _source_from_table(self, row: SourceTable) -> SourceRecord:
         return SourceRecord(
