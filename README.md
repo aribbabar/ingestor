@@ -12,11 +12,19 @@ npm run dev
 
 During development, Tauri starts Vite at `http://127.0.0.1:1420` and the Python backend at `http://127.0.0.1:8765`.
 
-## Build
+## Build The Installer
 
 ```powershell
-npm run build
+npm --prefix frontend run tauri -- build
 ```
+
+The release build creates a single Windows NSIS setup executable that contains the frontend, packaged backend, packaged `ingestor` CLI, and app-owned skills:
+
+```powershell
+frontend\src-tauri\target\release\bundle\nsis\Ingestor_0.1.0_x64-setup.exe
+```
+
+That setup `.exe` is the file to distribute to users.
 
 The active app code lives in `frontend`, `backend`, and `skills`. The `reference` folder is only a source reference and can be removed once this Tauri version has everything you need.
 
