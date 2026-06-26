@@ -1,8 +1,8 @@
-# ingestor-docs
+# Ingestor Backend
 
-Python package for the Ingestor local documentation daemon and CLI.
+Internal Python backend for the Ingestor desktop app, local daemon, and CLI.
 
-The package exposes two console commands:
+The backend exposes two entrypoints used by the packaged app:
 
 - `ingestor` calls a running local Ingestor daemon API.
 - `ingestor-daemon` starts the local FastAPI daemon.
@@ -12,21 +12,21 @@ The package exposes two console commands:
 Run against an already running desktop app or daemon:
 
 ```powershell
-uvx --from ingestor-docs ingestor health
-uvx --from ingestor-docs ingestor list --output json
-uvx --from ingestor-docs ingestor search all "query" --output json
+ingestor health
+ingestor list --output json
+ingestor search all "query" --output json
 ```
 
-Start the daemon from the package:
+Start the daemon directly:
 
 ```powershell
-uvx --from ingestor-docs ingestor daemon
+ingestor daemon
 ```
 
 Or let a CLI command start the daemon when it is not already reachable:
 
 ```powershell
-uvx --from ingestor-docs ingestor --start-daemon search all "query" --output json
+ingestor --start-daemon search all "query" --output json
 ```
 
 By default, the CLI talks to `http://127.0.0.1:8765`. Use `--api-url` or `INGESTOR_API_URL` to point it at a different local daemon.

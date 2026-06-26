@@ -28,7 +28,7 @@ ingestor list
 ingestor search all "how do I configure routing?" --output json
 ```
 
-The desktop app includes a bundled CLI, but the installer does not modify your user `PATH`. If `ingestor` is not available globally, use `uvx --from ingestor-docs ingestor ...`, run the bundled CLI by its full path, or add the installed `binaries` directory to `PATH` yourself.
+The desktop app includes the supported `ingestor` CLI. Make the installed CLI available on `PATH` before using terminal commands or agent skills.
 
 ## Architecture
 
@@ -70,12 +70,6 @@ By default, the CLI talks to `http://127.0.0.1:8765`. Override that with either:
 ```powershell
 ingestor --api-url http://127.0.0.1:8765 health
 $env:INGESTOR_API_URL = "http://127.0.0.1:8765"
-```
-
-The PyPI distribution is named `ingestor-docs`, while the console command remains `ingestor`. If the package is available in an environment that supports `uvx`, use:
-
-```powershell
-uvx --from ingestor-docs ingestor search all "query" --output json
 ```
 
 ## Agent Skills

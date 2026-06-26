@@ -4,7 +4,7 @@ description: >-
   Manage the local Ingestor documentation index. Use to index local folders or
   files, crawl web documentation, refresh sources, and prepare docs for
   Ingestor search.
-compatibility: Requires the Ingestor desktop app or local backend running on 127.0.0.1.
+compatibility: Requires the Ingestor desktop app and `ingestor` CLI on PATH.
 metadata:
   author: ingestor
 ---
@@ -22,10 +22,8 @@ Index documentation into Ingestor so agents can retrieve it later with the
 
 ## Commands
 
-Use the `ingestor` CLI command. If it is not installed but the Python package
-is available, run the same commands with `uvx --from ingestor-docs ingestor ...`.
-If these calls fail, open the Ingestor desktop app, run `ingestor daemon`, or use
-`ingestor --start-daemon ...` so the local daemon is available.
+Use the installed `ingestor` CLI command. The Ingestor desktop app owns the
+local daemon and should be installed before this skill is used.
 
 ### index-local
 

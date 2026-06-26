@@ -1,5 +1,5 @@
 [project]
-name = "ingestor-docs"
+name = "ingestor"
 version = "0.1.0"
 description = "Standalone documentation ingestion, indexing, and retrieval for local agents."
 readme = "README.md"
