@@ -25,9 +25,27 @@ import type {
   ViewName,
   WebForm,
 } from './types'
+import {
+  API_BASE_URL,
+  cancelIndexJob,
+  deleteSource as deleteSourceRequest,
+  loadJob,
+  loadSettingsBundle,
+  loadSources,
+  pickFilesFromApi,
+  pickFolderFromApi,
+  registerLocalSource as registerLocalSourceRequest,
+  registerWebSource as registerWebSourceRequest,
+  resetSettings,
+  searchSource,
+  startIndexJob,
+  syncSkills as syncSkillsRequest,
+  updateEmbeddingIndexingSettings,
+  updateEmbeddingSettings,
+  updateRetrievalSettings,
+} from './api'
 import styles from './App.module.css'
 
-const API_BASE_URL = window.ingestorDesktop?.backendUrl ?? import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8765'
 type AppMessage = Exclude<Message, null> & { view: ViewName }
 
 const PAGE_TITLES: Record<ViewName, string> = {
@@ -225,9 +243,7 @@ function App() {
   const recentSources = sortedSources.slice(0, 5)
 
   const refreshSources = useCallback(async () => {
-    const response = await fetch(`${API_BASE_URL}/api/sources`)
-    if (!response.ok) throw new Error('Unable to load sources')
-    const payload = (await response.json()) as { sources: SourceRecord[]; jobs: IndexJob[] }
+    const payload = await loadSources()
     setSources(payload.sources)
     setJobs(payload.jobs)
     setSelectedSourceId((current) =>
@@ -238,24 +254,16 @@ function App() {
   }, [])
 
   const refreshSettings = useCallback(async () => {
-    const [healthResponse, settingsResponse, ollamaModelsResponse, skillsResponse] = await Promise.all([
-      fetch(`${API_BASE_URL}/api/health`),
-      fetch(`${API_BASE_URL}/api/settings`),
-      fetch(`${API_BASE_URL}/api/ollama/models`),
-      fetch(`${API_BASE_URL}/api/skills/targets`),
-    ])
-    if (!healthResponse.ok || !settingsResponse.ok || !ollamaModelsResponse.ok || !skillsResponse.ok) {
-      throw new Error('API unavailable')
-    }
-    setHealth((await healthResponse.json()) as HealthResponse)
-    const settingsPayload = (await settingsResponse.json()) as SettingsResponse
+    const { health: healthPayload, settings: settingsPayload, ollamaModels: modelsPayload, skillTargets: skillsPayload } =
+      await loadSettingsBundle()
+    setHealth(healthPayload)
     setSettings(settingsPayload)
     if (!hasAppliedDefaultSearchMode.current) {
       setSearchMode(settingsPayload.default_search_mode)
       hasAppliedDefaultSearchMode.current = true
     }
-    setOllamaModels((await ollamaModelsResponse.json()) as OllamaModelsResponse)
-    setSkillTargets((await skillsResponse.json()) as SkillTargetsResponse)
+    setOllamaModels(modelsPayload)
+    setSkillTargets(skillsPayload)
     setApiStatus('online')
   }, [])
 
@@ -276,22 +284,28 @@ function App() {
   }, [])
 
   const refreshJob = useCallback(async (jobId: string) => {
-    const response = await fetch(`${API_BASE_URL}/api/sources/jobs/${jobId}`)
-    if (!response.ok) return
-    const payload = (await response.json()) as { job: IndexJob; logs: string }
-    setJobs((current) => [payload.job, ...current.filter((job) => job.id !== payload.job.id)])
-    setActiveLogs(payload.logs)
+    try {
+      const payload = await loadJob(jobId)
+      setJobs((current) => [payload.job, ...current.filter((job) => job.id !== payload.job.id)])
+      setActiveLogs(payload.logs)
+    } catch {
+      return
+    }
   }, [])
+
+  const loadAppData = useCallback(async () => {
+    await refreshSettings()
+    await refreshStartupSettings()
+    await refreshCliPathSettings()
+    await refreshSources()
+  }, [refreshCliPathSettings, refreshSettings, refreshSources, refreshStartupSettings])
 
   useEffect(() => {
     let isActive = true
 
     async function load() {
       try {
-        await refreshSettings()
-        await refreshStartupSettings()
-        await refreshCliPathSettings()
-        await refreshSources()
+        await loadAppData()
       } catch {
         if (isActive) setApiStatus('offline')
       }
@@ -301,7 +315,7 @@ function App() {
     return () => {
       isActive = false
     }
-  }, [refreshCliPathSettings, refreshSettings, refreshSources, refreshStartupSettings])
+  }, [loadAppData])
 
   useEffect(() => {
     if (!latestJob || !isActiveJob(latestJob)) return
@@ -317,6 +331,16 @@ function App() {
       if (!status.online) setApiStatus('offline')
     })
   }, [])
+
+  async function retryApiConnection() {
+    setApiStatus('checking')
+    setMessage(null)
+    try {
+      await loadAppData()
+    } catch {
+      setApiStatus('offline')
+    }
+  }
 
   function selectSource(sourceId: string) {
     setSelectedSourceId(sourceId)
@@ -356,16 +380,7 @@ function App() {
     setIsSubmitting(true)
     setMessage(null)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sources/local-folder`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paths,
-          name,
-        }),
-      })
-      if (!response.ok) throw new Error(await readErrorMessage(response))
-      const payload = (await response.json()) as { source: SourceRecord }
+      const payload = await registerLocalSourceRequest(paths, name)
       const job = await startIndexJobForSource(payload.source.id)
       setLocalForm(initialLocalForm)
       setSelectedSourceId(payload.source.id)
@@ -398,21 +413,15 @@ function App() {
     setIsSubmitting(true)
     setMessage(null)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sources/web`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: webForm.url,
-          name,
-          max_depth: webForm.maxDepth,
-          max_pages: webForm.maxPages,
-          scope: webForm.scope,
-          include_patterns: splitPatternLines(webForm.includePatterns),
-          exclude_patterns: splitPatternLines(webForm.excludePatterns),
-        }),
+      const payload = await registerWebSourceRequest({
+        url: webForm.url,
+        name,
+        max_depth: webForm.maxDepth,
+        max_pages: webForm.maxPages,
+        scope: webForm.scope,
+        include_patterns: splitPatternLines(webForm.includePatterns),
+        exclude_patterns: splitPatternLines(webForm.excludePatterns),
       })
-      if (!response.ok) throw new Error(await readErrorMessage(response))
-      const payload = (await response.json()) as { source: SourceRecord }
       const job = await startIndexJobForSource(payload.source.id)
       setWebForm((current) => ({ ...current, url: '', name: '' }))
       setSelectedSourceId(payload.source.id)
@@ -445,9 +454,7 @@ function App() {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/folders/pick`, { method: 'POST' })
-      if (!response.ok) throw new Error(await readErrorMessage(response))
-      const payload = (await response.json()) as { path: string | null }
+      const payload = await pickFolderFromApi()
       if (payload.path) {
         setLocalForm((current) => ({
           ...current,
@@ -477,9 +484,7 @@ function App() {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/folders/pick-files`, { method: 'POST' })
-      if (!response.ok) throw new Error(await readErrorMessage(response))
-      const payload = (await response.json()) as { paths: string[] }
+      const payload = await pickFilesFromApi()
       setLocalForm((current) => ({
         ...current,
         paths: normalizePathList([...current.paths, ...payload.paths]),
@@ -509,11 +514,7 @@ function App() {
   }
 
   async function startIndexJobForSource(sourceId: string) {
-    const response = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/index`, {
-      method: 'POST',
-    })
-    if (!response.ok) throw new Error(await readErrorMessage(response))
-    const payload = (await response.json()) as { job: IndexJob }
+    const payload = await startIndexJob(sourceId)
     setJobs((current) => [payload.job, ...current.filter((job) => job.id !== payload.job.id)])
     return payload.job
   }
@@ -535,18 +536,12 @@ function App() {
     setSearchOutput(null)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sources/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source_id: source.id,
-          query,
-          limit: searchLimit,
-          mode: searchMode,
-        }),
-      })
-      if (!response.ok) throw new Error(await readErrorMessage(response))
-      setSearchOutput((await response.json()) as SearchResponse)
+      setSearchOutput(await searchSource({
+        source_id: source.id,
+        query,
+        limit: searchLimit,
+        mode: searchMode,
+      }))
     } catch (error) {
       setSearchOutput({
         command: [],
@@ -583,11 +578,7 @@ function App() {
   async function cancelJob(job: IndexJob, view: ViewName = 'sources') {
     setMessage(null)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sources/jobs/${job.id}/cancel`, {
-        method: 'POST',
-      })
-      if (!response.ok) throw new Error(await readErrorMessage(response))
-      const payload = (await response.json()) as { job: IndexJob; logs: string }
+      const payload = await cancelIndexJob(job.id)
       setJobs((current) => [payload.job, ...current.filter((currentJob) => currentJob.id !== payload.job.id)])
       setActiveLogs(payload.logs)
       await refreshSources()
@@ -607,10 +598,7 @@ function App() {
     setDeletingSourceId(sourceId)
     setMessage(null)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/delete`, {
-        method: 'POST',
-      })
-      if (!response.ok) throw new Error(await readErrorMessage(response))
+      await deleteSourceRequest(sourceId)
       setSearchOutput(null)
       setActiveLogs('')
       await refreshSources()
@@ -633,44 +621,22 @@ function App() {
       let nextSettings: SettingsResponse | null = null
 
       if (request.resetToDefaults) {
-        const response = await fetch(`${API_BASE_URL}/api/settings/reset`, {
-          method: 'POST',
-        })
-        if (!response.ok) throw new Error(await readErrorMessage(response))
-        nextSettings = (await response.json()) as SettingsResponse
+        nextSettings = await resetSettings()
       }
 
       if (request.model) {
-        const response = await fetch(`${API_BASE_URL}/api/settings/embedding`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: request.model }),
-        })
-        if (!response.ok) throw new Error(await readErrorMessage(response))
-        nextSettings = (await response.json()) as SettingsResponse
+        nextSettings = await updateEmbeddingSettings(request.model)
       }
 
       if (request.indexing) {
-        const response = await fetch(`${API_BASE_URL}/api/settings/embedding/indexing`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            strategy: request.indexing.strategy,
-            batch_size: request.indexing.batchSize,
-          }),
+        nextSettings = await updateEmbeddingIndexingSettings({
+          strategy: request.indexing.strategy,
+          batch_size: request.indexing.batchSize,
         })
-        if (!response.ok) throw new Error(await readErrorMessage(response))
-        nextSettings = (await response.json()) as SettingsResponse
       }
 
       if (request.retrievalMode) {
-        const response = await fetch(`${API_BASE_URL}/api/settings/retrieval`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: request.retrievalMode }),
-        })
-        if (!response.ok) throw new Error(await readErrorMessage(response))
-        nextSettings = (await response.json()) as SettingsResponse
+        nextSettings = await updateRetrievalSettings(request.retrievalMode)
       }
 
       if (nextSettings) {
@@ -693,13 +659,7 @@ function App() {
     setIsSyncingSkills(true)
     setMessage(null)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/skills/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_ids: targetIds ?? null }),
-      })
-      if (!response.ok) throw new Error(await readErrorMessage(response))
-      setSkillTargets((await response.json()) as SkillTargetsResponse)
+      setSkillTargets(await syncSkillsRequest(targetIds))
       showMessage('settings', { text: 'Agent skills updated', tone: 'success' })
     } catch (error) {
       showMessage('settings', {
@@ -804,97 +764,101 @@ function App() {
     <div className={styles.appShell}>
       <AppHeader activeView={activeView} apiStatus={apiStatus} />
 
-      <Routes>
-        <Route index element={<Navigate replace to="/capture" />} />
-        <Route
-          path="/capture"
-          element={
-            <CapturePage
-              activeLogs={activeLogs}
-              latestJob={latestJob}
-              selectedSource={selectedSource}
-              mode={mode}
-              message={captureMessage}
-              recentSources={recentSources}
-              localForm={localForm}
-              webForm={webForm}
-              isPickingFiles={isPickingFiles}
-              isPickingFolder={isPickingFolder}
-              isSubmitting={isSubmitting}
-              onModeChange={setMode}
-              onLocalFormChange={setLocalForm}
-              onWebFormChange={setWebForm}
-              onPickFiles={pickFiles}
-              onPickFolder={pickFolder}
-              onRemoveLocalPath={removeLocalPath}
-              onRegisterLocal={registerLocalSource}
-              onRegisterWeb={registerWebSource}
-              onResetWebOptions={resetWebOptions}
-              onNavigate={(view) => navigate(`/${view}`)}
-              onSelectSource={selectSource}
-              onCancelJob={(job) => cancelJob(job, 'capture')}
-            />
-          }
-        />
-        <Route
-          path="/sources"
-          element={
-            <SourcesPage
-              deletingSourceId={deletingSourceId}
-              isSearching={isSearching}
-              message={sourcesMessage}
-              query={query}
-              searchLimit={searchLimit}
-              searchMode={searchMode}
-              searchOutput={searchOutput}
-              selectedSource={selectedSource}
-              settings={settings}
-              reindexingSourceId={reindexingSourceId}
-              jobs={jobs}
-              sources={sortedSources}
-              totalSourceCount={sources.length}
-              onCancelJob={(job) => cancelJob(job, 'sources')}
-              onQueryChange={setQuery}
-              onRefreshSources={refreshSources}
-              onReindexSource={reindexSource}
-              onRequestDeleteSource={setSourcePendingDelete}
-              onSearchDocs={searchDocs}
-              onSearchLimitChange={setSearchLimit}
-              onSearchModeChange={setSearchMode}
-              onSelectSource={selectSource}
-            />
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <SettingsPage
-              settings={settings}
-              skillTargets={skillTargets}
-              startupSettings={startupSettings}
-              cliPathSettings={cliPathSettings}
-              updateStatus={updateStatus}
-              message={settingsMessage}
-              ollamaModels={ollamaModels}
-              isDesktopAvailable={Boolean(window.ingestorDesktop)}
-              isSavingSettings={isSavingSettings}
-              isSyncingSkills={isSyncingSkills}
-              isSavingStartup={isSavingStartup}
-              isAddingCliPath={isAddingCliPath}
-              isCheckingUpdate={isCheckingUpdate}
-              isInstallingUpdate={isInstallingUpdate}
-              onSaveSettings={saveSettings}
-              onSyncSkills={syncSkills}
-              onSetStartupEnabled={setStartupEnabled}
-              onAddCliToPath={addCliToPath}
-              onCopyCliPath={copyCliPath}
-              onCheckForUpdates={checkForUpdates}
-              onInstallUpdate={installUpdate}
-            />
-          }
-        />
-        <Route path="*" element={<Navigate replace to="/capture" />} />
-      </Routes>
+      {apiStatus === 'offline' ? (
+        <OfflineBackendState isDesktopAvailable={Boolean(window.ingestorDesktop)} onRetry={retryApiConnection} />
+      ) : (
+        <Routes>
+          <Route index element={<Navigate replace to="/capture" />} />
+          <Route
+            path="/capture"
+            element={
+              <CapturePage
+                activeLogs={activeLogs}
+                latestJob={latestJob}
+                selectedSource={selectedSource}
+                mode={mode}
+                message={captureMessage}
+                recentSources={recentSources}
+                localForm={localForm}
+                webForm={webForm}
+                isPickingFiles={isPickingFiles}
+                isPickingFolder={isPickingFolder}
+                isSubmitting={isSubmitting}
+                onModeChange={setMode}
+                onLocalFormChange={setLocalForm}
+                onWebFormChange={setWebForm}
+                onPickFiles={pickFiles}
+                onPickFolder={pickFolder}
+                onRemoveLocalPath={removeLocalPath}
+                onRegisterLocal={registerLocalSource}
+                onRegisterWeb={registerWebSource}
+                onResetWebOptions={resetWebOptions}
+                onNavigate={(view) => navigate(`/${view}`)}
+                onSelectSource={selectSource}
+                onCancelJob={(job) => cancelJob(job, 'capture')}
+              />
+            }
+          />
+          <Route
+            path="/sources"
+            element={
+              <SourcesPage
+                deletingSourceId={deletingSourceId}
+                isSearching={isSearching}
+                message={sourcesMessage}
+                query={query}
+                searchLimit={searchLimit}
+                searchMode={searchMode}
+                searchOutput={searchOutput}
+                selectedSource={selectedSource}
+                settings={settings}
+                reindexingSourceId={reindexingSourceId}
+                jobs={jobs}
+                sources={sortedSources}
+                totalSourceCount={sources.length}
+                onCancelJob={(job) => cancelJob(job, 'sources')}
+                onQueryChange={setQuery}
+                onRefreshSources={refreshSources}
+                onReindexSource={reindexSource}
+                onRequestDeleteSource={setSourcePendingDelete}
+                onSearchDocs={searchDocs}
+                onSearchLimitChange={setSearchLimit}
+                onSearchModeChange={setSearchMode}
+                onSelectSource={selectSource}
+              />
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <SettingsPage
+                settings={settings}
+                skillTargets={skillTargets}
+                startupSettings={startupSettings}
+                cliPathSettings={cliPathSettings}
+                updateStatus={updateStatus}
+                message={settingsMessage}
+                ollamaModels={ollamaModels}
+                isDesktopAvailable={Boolean(window.ingestorDesktop)}
+                isSavingSettings={isSavingSettings}
+                isSyncingSkills={isSyncingSkills}
+                isSavingStartup={isSavingStartup}
+                isAddingCliPath={isAddingCliPath}
+                isCheckingUpdate={isCheckingUpdate}
+                isInstallingUpdate={isInstallingUpdate}
+                onSaveSettings={saveSettings}
+                onSyncSkills={syncSkills}
+                onSetStartupEnabled={setStartupEnabled}
+                onAddCliToPath={addCliToPath}
+                onCopyCliPath={copyCliPath}
+                onCheckForUpdates={checkForUpdates}
+                onInstallUpdate={installUpdate}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate replace to="/capture" />} />
+        </Routes>
+      )}
 
       {sourcePendingDelete ? (
         <ConfirmDialog
@@ -908,20 +872,6 @@ function App() {
       ) : null}
     </div>
   )
-}
-
-async function readErrorMessage(response: Response) {
-  const text = await response.text()
-  if (!text) return 'Request failed'
-
-  try {
-    const payload = JSON.parse(text) as { detail?: unknown }
-    if (typeof payload.detail === 'string') return payload.detail
-  } catch {
-    return text
-  }
-
-  return text
 }
 
 function normalizePathList(paths: string[]) {
@@ -1029,6 +979,33 @@ function isSourceQueryable(source: SourceRecord | undefined, settings: SettingsR
 
 function isActiveJob(job: IndexJob) {
   return job.status === 'running' || job.status === 'cancelling'
+}
+
+function OfflineBackendState({
+  isDesktopAvailable,
+  onRetry,
+}: {
+  isDesktopAvailable: boolean
+  onRetry: () => void
+}) {
+  return (
+    <main className={styles.offlinePanel} aria-labelledby="offline-title">
+      <div>
+        <h1 id="offline-title">Backend unavailable</h1>
+        <p>
+          Ingestor could not reach the local API at <code>{API_BASE_URL}</code>.
+        </p>
+      </div>
+      <p>
+        {isDesktopAvailable
+          ? 'The desktop shell normally starts the local backend automatically. Retry the connection; if it stays offline, restart Ingestor.'
+          : 'Start the backend with npm run backend:serve, or run npm run dev from the repository root for the full desktop development flow.'}
+      </p>
+      <button className={styles.retryButton} type="button" onClick={() => void onRetry()}>
+        Retry connection
+      </button>
+    </main>
+  )
 }
 
 function sourceQueryDisabledMessage(source: SourceRecord, settings: SettingsResponse | null) {

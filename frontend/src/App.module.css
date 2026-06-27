@@ -5,6 +5,48 @@
   padding: var(--space-10) var(--space-9) var(--space-15);
 }
 
+.offlinePanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-6);
+  max-width: 720px;
+  padding: var(--panel-padding);
+}
+
+.offlinePanel h1 {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  margin: 0 0 var(--space-2);
+}
+
+.offlinePanel p {
+  color: var(--muted);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-body);
+  margin: 0;
+}
+
+.offlinePanel code {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.retryButton {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-md);
+  color: #fff;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  height: var(--control-height-md);
+  justify-self: start;
+  padding: 0 var(--space-6);
+}
+
 @media (max-width: 720px) {
   .appShell {
     padding: var(--space-9) var(--space-7) var(--space-14);

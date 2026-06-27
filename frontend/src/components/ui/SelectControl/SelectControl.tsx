@@ -102,11 +102,13 @@ export function SelectControl<T extends string>({
         <div className={styles.menu} id={listboxId} role="listbox">
           {options.map((option) => (
             <button
+              aria-label={option.label}
               aria-selected={option.value === value}
               className={option.value === value ? styles.optionSelected : undefined}
               key={option.value}
               onClick={() => choose(option)}
               role="option"
+              title={option.description}
               type="button"
             >
               <span>{option.label}</span>

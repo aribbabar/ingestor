@@ -24,6 +24,9 @@
 | Fixed | Cancel running jobs | Running jobs can be cancelled through the API and Sources/Capture UI. Active workers stop cooperatively; stale jobs from prior backend processes finalize as `cancelled`. Covered by tests and live API/UI checks. |
 | Fixed | Progress estimates | Jobs now expose structured progress fields. Local indexing shows exact scanned file totals and ETA; web indexing shows discovered page counts. Covered by tests and live API/UI checks. |
 | Fixed | CSP tightening | `tauri.conf.json` now restricts default loading, Tauri IPC, local backend access, image sources, and local styles instead of disabling CSP entirely. |
+| Fixed | Backend unavailable state | When the local API cannot be reached, the frontend shows a focused offline panel with the backend URL, desktop/dev startup guidance, and a retry action. Verified in the running browser UI. |
+| Fixed | Settings dropdown labels | Dropdown options now expose concise accessible names while keeping longer descriptions as secondary visible text/tooltips. Verified in the running browser UI. |
+| Partially fixed | Frontend service split | Frontend API calls moved out of `App.tsx` into `frontend/src/api.ts`; `App.tsx` still owns page state and can be split further later. |
 
 Verification for the latest remediation pass:
 
@@ -35,6 +38,7 @@ Verification for the latest remediation pass:
 - JSON parse check for `frontend/src-tauri/tauri.conf.json`
 - Live API check: local job cancellation moved from `cancelling` to `cancelled`; completed local job reported `progress_current=3` and `progress_total=3`.
 - Live browser check: Sources page rendered row-level progress, Cancel/Cancelling states, and cleared stuck cancellation controls after finalization.
+- Live browser check: backend-offline panel rendered after stopping the daemon, Retry recovered after restarting the daemon, and Settings dropdown options exposed short accessible labels.
 
 ---
 
@@ -57,7 +61,7 @@ Verification for the latest remediation pass:
 | 1 | **Fixed.** No visible progress bar or ETA during indexing. The Sources page only shows "Indexing" with a document/chunk counter. | Sources and Capture now render job progress bars. Local jobs show exact scanned file totals and ETA when possible; web jobs show discovered page counts. |
 | 2 | **Fixed.** No way to cancel a running index job. Once started, users must wait or kill the backend process. | Sources and Capture now expose a cancel action. Backend jobs transition through `cancelling` and finalize as `cancelled`; stale jobs from previous backend processes can also be cleared. |
 | 3 | **Fixed.** Search panel on Sources page is disabled with a static message. When a source is not queryable, the panel explains why but offers no link to view its progress. | Disabled search messaging now links users back to registry progress when the selected source has an active indexing job. |
-| 4 | **Settings dropdown labels are verbose and duplicated.** Each option repeats the category name ("Hybrid Combine full text...", "Full text Use SQLite FTS5..."). | Use short labels with tooltips or secondary description text. |
+| 4 | **Fixed.** Settings dropdown labels are verbose and duplicated. Each option repeats the category name ("Hybrid Combine full text...", "Full text Use SQLite FTS5..."). | Options now keep short accessible labels (`Hybrid`, `Full text`, `Embeddings`) while preserving descriptions as secondary visible text and tooltips. |
 | 5 | **Fixed.** The "Check" update button gives no feedback about network/updater configuration. In a dev build it is unclear whether it does anything. | Updater section is hidden when the Tauri desktop bridge is unavailable. |
 | 6 | **Fixed.** "Start with Windows" checkbox is shown in the dev build even though `startupSettings.supported` is false. | Desktop behavior section is hidden when the Tauri desktop bridge is unavailable. |
 
@@ -65,7 +69,7 @@ Verification for the latest remediation pass:
 
 ## 3. Usability Concerns
 
-- **Hard-coded backend URL.** `frontend/src/desktop.ts` and `frontend/src-tauri/src/lib.rs` default to `http://127.0.0.1:8765`. `npm run dev` fails to connect if the daemon is not already running, requiring manual backend startup before the UI works. The Tauri shell should either auto-start the daemon or surface a "start daemon" prompt.
+- **Partially fixed.** `frontend/src/desktop.ts` and `frontend/src-tauri/src/lib.rs` default to `http://127.0.0.1:8765`. The Tauri shell already auto-starts the bundled daemon in desktop builds. Browser/dev sessions now show a clear backend-unavailable state with the backend URL, startup guidance, and Retry instead of failing silently.
 - **Fixed.** Local file picker does not warn about huge artifact directories. Selecting `frontend/src-tauri` copied the entire `target/` directory (debug and release build outputs) into the local source snapshot. The resulting index grew to more than 1,500 documents and 2,000 chunks, most of which were `.json` fingerprint/build files rather than documentation.
 - **Fixed.** Default exclude/ignore patterns are insufficient. The snapshot ignore list ignores `node_modules`, `dist`, and `build`, but not `target/**`, `.git/**`, `.venv/**`, or IDE metadata. This causes unnecessary disk use and long index times.
 - **No search-as-you-type or search from the Capture page.** Users must switch to Sources and select a source before searching.
@@ -83,8 +87,8 @@ Verification for the latest remediation pass:
 
 ## 5. Code / Architecture Observations
 
-- **Frontend state management is concentrated in `App.tsx` (987 lines).** It mixes API calls, business logic, and UI state. Consider moving API wrappers (`refreshSources`, `saveSettings`, etc.) into a small service layer and keeping `App.tsx` as wiring only.
-- **TypeScript `API_BASE_URL` fallback chain is correct** (`window.ingestorDesktop?.backendUrl ?? import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8765'`), but the hard-coded default masks environment-specific setups.
+- **Partially fixed.** Frontend state management is concentrated in `App.tsx`. API wrappers now live in `frontend/src/api.ts`, but `App.tsx` still mixes routing, view state, and orchestration. A future pass can extract hooks by feature area.
+- **Partially fixed.** TypeScript `API_BASE_URL` fallback chain is correct (`window.ingestorDesktop?.backendUrl ?? import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8765'`). The hard-coded local default remains intentional, but unreachable backend states are now surfaced explicitly in the UI.
 - **Fixed.** CSP is set to `null` in `tauri.conf.json`. This disables Content-Security Policy in the built app. It should be tightened before shipping, at minimum to `default-src 'self'; connect-src 'self' http://127.0.0.1:8765`.
 - **Backend `LocalSourceRequest` supports both `paths` and a legacy `path` field.** The API accepts `paths` while the model also exposes `path`. This should be deprecated or documented.
 - **Fixed.** `index_source` failures caught by `_run_job` are now emitted through the process logger with a traceback, while the existing job log/status path remains intact.
@@ -100,7 +104,7 @@ Verification for the latest remediation pass:
 4. ~~Add a cancel action for running index jobs. Starting a new job on the same source is now blocked.~~ Fixed.
 
 ### Medium
-5. Have the Tauri shell auto-start the daemon or show a clear "daemon not running" state with a start button.
+5. ~~Have the Tauri shell auto-start the daemon or show a clear "daemon not running" state with a start button.~~ Partially fixed: desktop builds already auto-start the daemon; browser/dev mode now shows a backend-unavailable state with Retry and startup guidance.
 6. ~~Align binary names (`mainBinaryName`, `ingestor.exe`, `ingestor-daemon.exe`) and document the packaged layout.~~ Current build scripts already produce the expected backend and CLI binaries; no mismatch reproduced.
 7. ~~Hide/disable Desktop-only sections (startup, PATH, updates) when `window.ingestorDesktop` is unavailable.~~ Fixed.
 8. ~~Add a duplicate-source warning when the user selects a path that is already indexed.~~ Fixed for exact local path duplicates in the UI and backend.
@@ -108,7 +112,7 @@ Verification for the latest remediation pass:
 ### Low
 9. ~~Add `GET /api/sources/jobs` for consistency or remove references to it.~~ Fixed.
 10. ~~Tighten the Tauri CSP before release.~~ Fixed.
-11. Refactor `App.tsx` into smaller service/hook modules.
+11. Partially fixed: API calls moved from `App.tsx` into `frontend/src/api.ts`. Remaining hook/page-state extraction can be handled in a later pass.
 12. Consider deduplicating local snapshots across sources.
 
 ---
