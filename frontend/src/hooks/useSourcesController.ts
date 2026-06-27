@@ -27,6 +27,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
   const [searchLimit, setSearchLimit] = useState(8)
   const [searchMode, setSearchMode] = useState<SearchMode>('hybrid')
   const [searchOutput, setSearchOutput] = useState<SearchResponse | null>(null)
+  const [hasSearched, setHasSearched] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null)
   const [sourcePendingDelete, setSourcePendingDelete] = useState<SourceRecord | null>(null)
@@ -126,6 +127,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     event.preventDefault()
     const source = selectedSource
     if (!source) return
+    setHasSearched(true)
     if (!isSourceQueryable(source, settings)) {
       setSearchOutput({
         command: [],
@@ -136,7 +138,6 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
       return
     }
     setIsSearching(true)
-    setSearchOutput(null)
 
     try {
       setSearchOutput(await searchSource({
@@ -164,6 +165,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
       setSelectedSourceId(source.id)
       if (selectedSource?.id !== source.id) {
         setSearchOutput(null)
+        setHasSearched(false)
       }
       setActiveLogs('')
       showMessage('sources', { text: `${source.name} is re-indexing`, tone: 'success' })
@@ -202,6 +204,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     try {
       await deleteSourceRequest(sourceId)
       setSearchOutput(null)
+      setHasSearched(false)
       setActiveLogs('')
       await refreshSources()
       setSourcePendingDelete(null)
@@ -221,9 +224,13 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     applyInitialSearchMode,
     applySavedSearchMode,
     cancelJob,
-    clearSearchOutput: () => setSearchOutput(null),
+    clearSearchOutput: () => {
+      setSearchOutput(null)
+      setHasSearched(false)
+    },
     deletePendingSource,
     deletingSourceId,
+    hasSearched,
     isSearching,
     jobs,
     latestJob,

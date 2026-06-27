@@ -134,6 +134,7 @@ function App() {
     clearSearchOutput,
     deletePendingSource,
     deletingSourceId,
+    hasSearched,
     isSearching,
     jobs,
     latestJob,
@@ -449,6 +450,7 @@ function App() {
               element={
                 <SourcesPage
                   deletingSourceId={deletingSourceId}
+                  hasSearched={hasSearched}
                   isSearching={isSearching}
                   message={sourcesMessage}
                   query={query}

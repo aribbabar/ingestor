@@ -16,6 +16,7 @@ import styles from './SourcesPage.module.css'
 
 type SourcesPageProps = {
   deletingSourceId: string | null
+  hasSearched: boolean
   isSearching: boolean
   message: Message
   query: string
@@ -47,6 +48,7 @@ const searchModeOptions: { value: SearchMode; label: string }[] = [
 
 export function SourcesPage({
   deletingSourceId,
+  hasSearched,
   isSearching,
   message,
   query,
@@ -251,7 +253,12 @@ export function SourcesPage({
             Reindexing is running. Existing results remain visible and may be outdated until indexing finishes.
           </div>
         ) : null}
-        <SearchResults output={searchOutput} />
+        {isSearching && searchOutput ? (
+          <div className={styles.searchNotice}>
+            Searching. Existing results remain visible until the new search finishes.
+          </div>
+        ) : null}
+        <SearchResults hasSearched={hasSearched} isSearching={isSearching} output={searchOutput} />
       </section>
     </main>
   )
@@ -281,8 +288,19 @@ function JobProgress({ job, source }: { job: IndexJob; source: SourceRecord }) {
   )
 }
 
-function SearchResults({ output }: { output: SearchResponse | null }) {
-  if (!output) return <div className={styles.emptyState}>No results yet.</div>
+function SearchResults({
+  hasSearched,
+  isSearching,
+  output,
+}: {
+  hasSearched: boolean
+  isSearching: boolean
+  output: SearchResponse | null
+}) {
+  if (!output) {
+    if (isSearching) return <div className={styles.emptyState}>Searching...</div>
+    return <div className={styles.emptyState}>{hasSearched ? 'No results yet.' : 'No search has been run yet.'}</div>
+  }
   if (output.stderr) return <div className={styles.errorState}>{output.stderr}</div>
   if (!output.results.length) return <div className={styles.emptyState}>No matching results.</div>
 
