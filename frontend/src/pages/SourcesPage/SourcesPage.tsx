@@ -4,6 +4,7 @@ import { MessageLine } from '../../components/ui/MessageLine/MessageLine'
 import { PageHeading } from '../../components/ui/PageHeading/PageHeading'
 import { SelectControl } from '../../components/ui/SelectControl/SelectControl'
 import { classNames } from '../../utils/classNames'
+import { jobProgress } from '../../utils/jobProgress'
 import {
   isActiveJob,
   isRecord,
@@ -343,38 +344,6 @@ function sourceCompatibilityLabel(source: SourceRecord, sourceQueryable: boolean
   if (sourceQueryable) return 'queryable'
   if (source.status === 'indexed') return 'reindex required'
   return source.status
-}
-
-function jobProgress(job: IndexJob) {
-  const total = job.progress_total ?? 0
-  const current = Math.max(0, job.progress_current)
-  const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 8
-  const unit = job.progress_label.startsWith('http') ? 'pages' : 'files'
-  const baseLabel =
-    total > 0
-      ? `${current} of ${total} ${unit} scanned`
-      : current > 0
-        ? `${current} ${unit} scanned`
-        : job.status === 'cancelling'
-          ? 'Cancelling'
-          : 'Starting'
-  const detail = job.progress_label && !job.progress_label.startsWith('Scanning ') ? ` - ${job.progress_label}` : ''
-  return {
-    percent,
-    label: `${baseLabel}${detail}`,
-    eta: formatEta(job, current, total),
-  }
-}
-
-function formatEta(job: IndexJob, current: number, total: number) {
-  if (total <= 0 || current <= 0 || current >= total || job.status !== 'running') return undefined
-  const startedAt = new Date(job.created_at).getTime()
-  if (Number.isNaN(startedAt)) return undefined
-  const elapsedSeconds = Math.max(1, (Date.now() - startedAt) / 1000)
-  const secondsRemaining = Math.round((elapsedSeconds / current) * (total - current))
-  if (secondsRemaining < 60) return `about ${secondsRemaining}s left`
-  const minutes = Math.ceil(secondsRemaining / 60)
-  return `about ${minutes}m left`
 }
 
 function formatStrategy(lastIndex: Record<string, unknown> | null) {

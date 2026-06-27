@@ -27,6 +27,11 @@ Additional fixes from this pass:
 - **BUG-3:** Reindexing the currently selected source no longer clears existing search results. The Sources page keeps the previous results visible and shows a notice that they may be outdated until indexing finishes.
 - **UX-2:** `ConfirmDialog` now names the dialog directly with `aria-label={title}` while preserving the visible heading.
 
+Cleanup fixes from this pass:
+
+- **CODE-1:** Extracted duplicated `jobProgress` / `formatEta` logic into `frontend/src/utils/jobProgress.ts`.
+- **CODE-2:** Deleted unused `frontend/src/App.css`; no `frontend/src` imports referenced it.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -38,6 +43,7 @@ Verification run after the fixes:
 | `npm --prefix frontend run build` | Pass |
 | Browser verification at `http://127.0.0.1:1420/#/settings` | Pass: Reset banner, confirmation dialog, cancel path, and Settings render verified |
 | Browser verification at `http://127.0.0.1:1420/#/sources` | Pass: search results stayed visible during Reindex, outdated-results notice appeared, delete dialog was named and cancelled safely |
+| `rg -n "App\\.css|function jobProgress|function formatEta" frontend\src` | Pass: only shared `frontend/src/utils/jobProgress.ts` defines progress helpers |
 
 Still open from this report: UX-4, UX-5, UX-6, and the remaining lower-priority cleanup/performance items.
 
