@@ -8,11 +8,13 @@ import { SettingsPage } from './pages/SettingsPage/SettingsPage'
 import type { SettingsSaveRequest } from './pages/SettingsPage/SettingsPage'
 import { SourcesPage } from './pages/SourcesPage/SourcesPage'
 import type {
+  CliPathSettings,
   HealthResponse,
   IndexJob,
   LocalForm,
   Message,
   OllamaModelsResponse,
+  DesktopUpdateStatus,
   SearchMode,
   SearchResponse,
   SettingsResponse,
@@ -135,6 +137,8 @@ function App() {
   const [settings, setSettings] = useState<SettingsResponse | null>(null)
   const [skillTargets, setSkillTargets] = useState<SkillTargetsResponse | null>(null)
   const [startupSettings, setStartupSettings] = useState<StartupSettings | null>(null)
+  const [cliPathSettings, setCliPathSettings] = useState<CliPathSettings | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null)
   const [ollamaModels, setOllamaModels] = useState<OllamaModelsResponse | null>(null)
   const [sources, setSources] = useState<SourceRecord[]>([])
   const [jobs, setJobs] = useState<IndexJob[]>([])
@@ -161,6 +165,9 @@ function App() {
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [isSyncingSkills, setIsSyncingSkills] = useState(false)
   const [isSavingStartup, setIsSavingStartup] = useState(false)
+  const [isAddingCliPath, setIsAddingCliPath] = useState(false)
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false)
   const hasAppliedDefaultSearchMode = useRef(false)
 
   const activeView = useMemo((): ViewName => {
@@ -260,6 +267,14 @@ function App() {
     setStartupSettings(await window.ingestorDesktop.getStartupSettings())
   }, [])
 
+  const refreshCliPathSettings = useCallback(async () => {
+    if (!window.ingestorDesktop) {
+      setCliPathSettings({ supported: false, path: '', inPath: false })
+      return
+    }
+    setCliPathSettings(await window.ingestorDesktop.getCliPathSettings())
+  }, [])
+
   const refreshJob = useCallback(async (jobId: string) => {
     const response = await fetch(`${API_BASE_URL}/api/sources/jobs/${jobId}`)
     if (!response.ok) return
@@ -275,6 +290,7 @@ function App() {
       try {
         await refreshSettings()
         await refreshStartupSettings()
+        await refreshCliPathSettings()
         await refreshSources()
       } catch {
         if (isActive) setApiStatus('offline')
@@ -285,7 +301,7 @@ function App() {
     return () => {
       isActive = false
     }
-  }, [refreshSettings, refreshSources, refreshStartupSettings])
+  }, [refreshCliPathSettings, refreshSettings, refreshSources, refreshStartupSettings])
 
   useEffect(() => {
     if (!latestJob || latestJob.status !== 'running') return
@@ -687,6 +703,75 @@ function App() {
     }
   }
 
+  async function addCliToPath() {
+    if (!window.ingestorDesktop) return
+    setIsAddingCliPath(true)
+    setMessage(null)
+    try {
+      const nextSettings = await window.ingestorDesktop.addCliToPath()
+      setCliPathSettings(nextSettings)
+      showMessage('settings', {
+        text: nextSettings.inPath ? 'Ingestor CLI folder added to PATH' : 'Unable to confirm PATH update',
+        tone: nextSettings.inPath ? 'success' : 'error',
+      })
+    } catch (error) {
+      showMessage('settings', {
+        text: error instanceof Error ? error.message : 'Unable to add CLI folder to PATH',
+        tone: 'error',
+      })
+    } finally {
+      setIsAddingCliPath(false)
+    }
+  }
+
+  async function copyCliPath() {
+    const path = cliPathSettings?.path
+    if (!path) return
+
+    try {
+      await navigator.clipboard.writeText(path)
+      showMessage('settings', { text: 'CLI folder path copied', tone: 'success' })
+    } catch {
+      showMessage('settings', { text: 'Select the CLI folder path and copy it manually', tone: 'error' })
+    }
+  }
+
+  async function checkForUpdates() {
+    if (!window.ingestorDesktop) return
+    setIsCheckingUpdate(true)
+    setMessage(null)
+    try {
+      const nextStatus = await window.ingestorDesktop.checkForUpdate()
+      setUpdateStatus(nextStatus)
+      showMessage('settings', {
+        text: nextStatus.available ? `Ingestor ${nextStatus.version} is available` : 'Ingestor is up to date',
+        tone: 'success',
+      })
+    } catch (error) {
+      showMessage('settings', {
+        text: error instanceof Error ? error.message : 'Unable to check for updates',
+        tone: 'error',
+      })
+    } finally {
+      setIsCheckingUpdate(false)
+    }
+  }
+
+  async function installUpdate() {
+    if (!window.ingestorDesktop || !updateStatus?.available) return
+    setIsInstallingUpdate(true)
+    setMessage(null)
+    try {
+      await window.ingestorDesktop.installUpdate()
+    } catch (error) {
+      showMessage('settings', {
+        text: error instanceof Error ? error.message : 'Unable to install update',
+        tone: 'error',
+      })
+      setIsInstallingUpdate(false)
+    }
+  }
+
   return (
     <div className={styles.appShell}>
       <AppHeader activeView={activeView} apiStatus={apiStatus} />
@@ -756,14 +841,23 @@ function App() {
               settings={settings}
               skillTargets={skillTargets}
               startupSettings={startupSettings}
+              cliPathSettings={cliPathSettings}
+              updateStatus={updateStatus}
               message={settingsMessage}
               ollamaModels={ollamaModels}
               isSavingSettings={isSavingSettings}
               isSyncingSkills={isSyncingSkills}
               isSavingStartup={isSavingStartup}
+              isAddingCliPath={isAddingCliPath}
+              isCheckingUpdate={isCheckingUpdate}
+              isInstallingUpdate={isInstallingUpdate}
               onSaveSettings={saveSettings}
               onSyncSkills={syncSkills}
               onSetStartupEnabled={setStartupEnabled}
+              onAddCliToPath={addCliToPath}
+              onCopyCliPath={copyCliPath}
+              onCheckForUpdates={checkForUpdates}
+              onInstallUpdate={installUpdate}
             />
           }
         />

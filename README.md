@@ -137,16 +137,19 @@ Then call it from the CLI:
 Build the Windows installer:
 
 ```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY="$env:USERPROFILE\.tauri\ingestor.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
 npm --prefix frontend run tauri -- build
 ```
 
-The release build creates a Windows NSIS setup executable that contains the React frontend, `ingestor-daemon.exe`, the `ingestor` CLI, and app-owned skills:
+The release build creates a signed Windows MSI installer and updater signature that contain the React frontend, `ingestor-daemon.exe`, the `ingestor` CLI, and app-owned skills:
 
 ```powershell
-frontend\src-tauri\target\release\bundle\nsis\Ingestor_0.1.0_x64-setup.exe
+frontend\src-tauri\target\release\bundle\msi\Ingestor_0.1.0_x64_en-US.msi
+frontend\src-tauri\target\release\bundle\msi\Ingestor_0.1.0_x64_en-US.msi.sig
 ```
 
-That setup `.exe` is the file to distribute to users.
+Publish the MSI, `.sig`, and a `latest.json` update manifest to GitHub Releases so the Settings update check can find new versions.
 
 ## Project Layout
 

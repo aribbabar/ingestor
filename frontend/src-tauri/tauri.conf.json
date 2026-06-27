@@ -26,14 +26,21 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["msi"],
+    "createUpdaterArtifacts": true,
     "resources": {
       "binaries": "binaries",
       "../../skills": "skills"
     },
     "windows": {
-      "nsis": {
-        "installMode": "currentUser"
+      "wix": {
+        "upgradeCode": "062e5893-99db-5d70-b11b-3c820b3344b7",
+        "template": "./windows/installer.wxs",
+        "language": {
+          "en-US": {
+            "localePath": "./windows/locales/en-US.wxl"
+          }
+        }
       }
     },
     "icon": [
@@ -43,5 +50,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU0NzlGNDkyMUI3MEQyOTQKUldTVTBuQWJrdlI1NUd6Mnpjai9sZGd6RGdlc1Z2YUYzeFdLNXFaaGwvU0pYaG94ZGhkaXhGWDIK",
+      "endpoints": [
+        "https://github.com/aribbabar/ingestor/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

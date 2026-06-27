@@ -123,6 +123,16 @@ export type StartupSettings = {
   openAtLogin: boolean
 }
 
+export type CliPathSettings = {
+  supported: boolean
+  path: string
+  inPath: boolean
+}
+
+export type DesktopUpdateStatus =
+  | { available: false }
+  | { available: true; version: string; currentVersion: string; date?: string; body?: string }
+
 export type LocalForm = {
   paths: string[]
   name: string

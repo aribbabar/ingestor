@@ -174,8 +174,96 @@
 
 .desktopRows {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-6);
   padding-top: var(--space-7);
+}
+
+.cliPathBlock {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-5);
+  padding-top: var(--space-6);
+}
+
+.cliPathHeader {
+  align-items: start;
+  display: flex;
+  gap: var(--space-6);
+  justify-content: space-between;
+}
+
+.cliPathHeader div {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.cliPathHeader h3 {
+  font-size: var(--font-size-md);
+}
+
+.cliPathHeader p {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-body);
+}
+
+.cliPathControls {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.cliPathControls input {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  min-height: var(--control-height-md);
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 var(--space-4);
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.cliPathControls input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-ring-size) var(--accent-soft);
+  outline: none;
+}
+
+.updateRows {
+  display: grid;
+  gap: var(--space-5);
+  padding-top: var(--space-7);
+}
+
+.updateAvailable {
+  align-items: center;
+  display: flex;
+  gap: var(--space-6);
+  justify-content: space-between;
+}
+
+.updateAvailable div {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.updateAvailable strong {
+  font-size: var(--font-size-sm);
+}
+
+.updateAvailable p {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
 }
 
 .toggleRow {
@@ -256,9 +344,12 @@
 
 @media (max-width: 820px) {
   .panelHeader,
+  .cliPathHeader,
+  .updateAvailable,
   .skillTargetHeader,
   .settingRow,
   .rowControls,
+  .cliPathControls,
   .indexingControls {
     grid-template-columns: 1fr;
   }
@@ -269,6 +360,15 @@
   }
 
   .skillTargetHeader {
+    display: grid;
+  }
+
+  .cliPathHeader {
+    display: grid;
+  }
+
+  .updateAvailable {
+    align-items: stretch;
     display: grid;
   }
 

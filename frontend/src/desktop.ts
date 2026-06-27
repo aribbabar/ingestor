@@ -1,8 +1,11 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-dialog'
+import { relaunch } from '@tauri-apps/plugin-process'
+import { check, type Update } from '@tauri-apps/plugin-updater'
 
 const backendUrl = 'http://127.0.0.1:8765'
+let pendingUpdate: Update | null = null
 
 function isTauriRuntime() {
   return Boolean(window.__TAURI_INTERNALS__)
@@ -39,6 +42,28 @@ function installDesktopBridge() {
     },
     getStartupSettings: () => invoke<StartupSettings>('get_startup_settings'),
     setStartupEnabled: (enabled) => invoke<StartupSettings>('set_startup_enabled', { enabled }),
+    getCliPathSettings: () => invoke<CliPathSettings>('get_cli_path_settings'),
+    addCliToPath: () => invoke<CliPathSettings>('add_cli_to_path'),
+    checkForUpdate: async () => {
+      pendingUpdate = await check()
+      if (!pendingUpdate) {
+        return { available: false }
+      }
+      return {
+        available: true,
+        version: pendingUpdate.version,
+        currentVersion: pendingUpdate.currentVersion,
+        date: pendingUpdate.date,
+        body: pendingUpdate.body,
+      }
+    },
+    installUpdate: async () => {
+      if (!pendingUpdate) {
+        throw new Error('Check for updates before installing.')
+      }
+      await pendingUpdate.downloadAndInstall()
+      await relaunch()
+    },
     onBackendStatus: (callback) => {
       let unlisten: (() => void) | null = null
       void listen<BackendStatus>('backend-status', (event) => callback(event.payload)).then((handler) => {

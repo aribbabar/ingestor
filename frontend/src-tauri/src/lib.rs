@@ -63,6 +63,14 @@ struct StartupSettings {
     open_at_login: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CliPathSettings {
+    supported: bool,
+    path: String,
+    in_path: bool,
+}
+
 #[tauri::command]
 fn get_backend_url() -> String {
     backend_url()
@@ -79,6 +87,31 @@ fn get_startup_settings() -> StartupSettings {
 #[tauri::command]
 fn set_startup_enabled(_enabled: bool) -> StartupSettings {
     get_startup_settings()
+}
+
+#[tauri::command]
+fn get_cli_path_settings(app: AppHandle) -> CliPathSettings {
+    cli_path_settings(&app)
+}
+
+#[tauri::command]
+fn add_cli_to_path(app: AppHandle) -> Result<CliPathSettings, String> {
+    let cli_dir = resolve_cli_dir(&app)?;
+
+    #[cfg(windows)]
+    {
+        if user_path_contains(&cli_dir)? {
+            return Ok(cli_path_settings(&app));
+        }
+
+        add_to_user_path(&cli_dir)?;
+        return Ok(cli_path_settings(&app));
+    }
+
+    #[cfg(not(windows))]
+    {
+        Err("PATH management is only available in the installed Windows app.".to_string())
+    }
 }
 
 fn backend_url() -> String {
@@ -140,6 +173,129 @@ fn resolve_skills_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .resource_dir()
         .map(|path| path.join("skills"))
         .map_err(|error| format!("Could not resolve resource directory: {error}"))
+}
+
+fn resolve_cli_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Ok(path) = env::var("INGESTOR_CLI_DIR") {
+        return Ok(PathBuf::from(path));
+    }
+
+    if cfg!(debug_assertions) {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        return Ok(manifest_dir.join("binaries"));
+    }
+
+    app.path()
+        .resource_dir()
+        .map(|path| path.join("binaries"))
+        .map_err(|error| format!("Could not resolve resource directory: {error}"))
+}
+
+fn cli_path_settings(app: &AppHandle) -> CliPathSettings {
+    match resolve_cli_dir(app) {
+        Ok(cli_dir) => {
+            let in_path = user_path_contains(&cli_dir).unwrap_or(false);
+            CliPathSettings {
+                supported: cfg!(windows) && cli_dir.exists(),
+                path: cli_dir.to_string_lossy().into_owned(),
+                in_path,
+            }
+        }
+        Err(_) => CliPathSettings {
+            supported: false,
+            path: String::new(),
+            in_path: false,
+        },
+    }
+}
+
+fn normalize_path_entry(path: &str) -> String {
+    path.trim()
+        .trim_matches('"')
+        .trim_end_matches(['\\', '/'])
+        .to_ascii_lowercase()
+}
+
+fn path_list_contains(path_list: &str, path: &PathBuf) -> bool {
+    let target = normalize_path_entry(&path.to_string_lossy());
+    path_list
+        .split(';')
+        .map(normalize_path_entry)
+        .any(|entry| !entry.is_empty() && entry == target)
+}
+
+#[cfg(windows)]
+fn read_user_path() -> Result<String, String> {
+    let output = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[Environment]::GetEnvironmentVariable('Path', 'User')",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("Could not read user PATH: {error}"))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+#[cfg(windows)]
+fn user_path_contains(path: &PathBuf) -> Result<bool, String> {
+    let user_path = read_user_path()?;
+    Ok(path_list_contains(&user_path, path))
+}
+
+#[cfg(not(windows))]
+fn user_path_contains(_path: &PathBuf) -> Result<bool, String> {
+    Ok(false)
+}
+
+#[cfg(windows)]
+fn add_to_user_path(path: &PathBuf) -> Result<(), String> {
+    let script = r#"
+$cli = $env:INGESTOR_CLI_DIR
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$parts = @()
+if (-not [string]::IsNullOrWhiteSpace($userPath)) {
+  $parts = $userPath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+}
+if ($parts -notcontains $cli) {
+  $nextPath = if ($parts.Count -eq 0) { $cli } else { ($parts + $cli) -join ';' }
+  [Environment]::SetEnvironmentVariable('Path', $nextPath, 'User')
+}
+Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition '[DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);'
+$result = [UIntPtr]::Zero
+[Win32.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 0x2, 5000, [ref]$result) | Out-Null
+"#;
+
+    let output = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            script,
+        ])
+        .env("INGESTOR_CLI_DIR", path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("Could not update user PATH: {error}"))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
 }
 
 fn resolve_python(backend_dir: &PathBuf) -> PathBuf {
@@ -222,10 +378,14 @@ pub fn run() {
         .manage(BackendProcess::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             get_backend_url,
             get_startup_settings,
-            set_startup_enabled
+            set_startup_enabled,
+            get_cli_path_settings,
+            add_cli_to_path
         ])
         .setup(|app| {
             let handle = app.handle().clone();
