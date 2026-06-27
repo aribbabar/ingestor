@@ -1,0 +1,76 @@
+{
+  "name": "neon-smoke",
+  "description": "Small deterministic retrieval fixture based on Neon documentation-style queries.",
+  "source": {
+    "id": "neon-eval",
+    "kind": "web",
+    "name": "neon-eval",
+    "version": "eval",
+    "location": "https://neon.com/docs"
+  },
+  "documents": [
+    {
+      "uri": "https://neon.com/docs/serverless/serverless-driver",
+      "title": "Neon serverless driver",
+      "content": "# Neon serverless driver\n\nUse the Neon serverless driver over WebSockets for interactive transactions. The Pool and Client APIs provide session and transaction support. HTTP uses fetch for one-shot queries.\n\n```ts\nimport ws from \"ws\";\nneonConfig.webSocketConstructor = ws;\n```\n"
+    },
+    {
+      "uri": "https://neon.com/docs/guides/prisma",
+      "title": "Direct connection for Prisma CLI",
+      "content": "# Direct connection for Prisma CLI\n\nUse a pooled connection string for application runtime and a direct connection string for Prisma schema operations. Set DATABASE_URL to the pooled connection and DIRECT_URL for prisma migrate or db push.\n"
+    },
+    {
+      "uri": "https://neon.com/docs/guides/branching-neon-api",
+      "title": "Branching with the Neon API",
+      "content": "# Branching with the Neon API\n\nCreate schema-only branches with init_source set to schema-only. Restore a branch using the branch restore endpoint when you need to recover data.\n"
+    },
+    {
+      "uri": "https://neon.com/docs/cli/branches",
+      "title": "Neon CLI command: branches",
+      "content": "# Neon CLI command: branches\n\nUse neonctl branches reset development --parent to reset a child branch. Use neonctl branches restore to restore a branch to a specific point in time.\n"
+    },
+    {
+      "uri": "https://neon.com/docs/guides/nestjs",
+      "title": "Connect a NestJS application to Neon",
+      "content": "# Connect a NestJS application to Neon\n\nCreate a NestJS service that reads environment variables, opens a PostgreSQL connection, and queries a table from a controller endpoint.\n"
+    }
+  ],
+  "cases": [
+    {
+      "id": "serverless-websocket-transactions",
+      "query": "Neon serverless driver transactions WebSocket fetch websocket constructor",
+      "source": "neon-eval",
+      "mode": "hybrid",
+      "limit": 5,
+      "max_rank": 5,
+      "expected": {
+        "uri_contains": "serverless/serverless-driver",
+        "terms": ["websocket", "transactions"]
+      }
+    },
+    {
+      "id": "prisma-direct-url",
+      "query": "Neon connection pooling Prisma pooled connection string directUrl migrations",
+      "source": "neon-eval",
+      "mode": "hybrid",
+      "limit": 5,
+      "max_rank": 2,
+      "expected": {
+        "uri_contains": "guides/prisma",
+        "terms": ["pooled connection", "direct_url"]
+      }
+    },
+    {
+      "id": "branch-reset-restore",
+      "query": "Neon branching create branch schema data reset restore point",
+      "source": "neon-eval",
+      "mode": "hybrid",
+      "limit": 5,
+      "max_rank": 3,
+      "expected": {
+        "uri_contains": ["cli/branches", "guides/branching-neon-api"],
+        "terms": ["branch"]
+      }
+    }
+  ]
+}

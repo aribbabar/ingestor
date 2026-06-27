@@ -183,3 +183,12 @@ npm --prefix frontend run build
 cd frontend\src-tauri
 cargo check
 ```
+
+Run the deterministic retrieval quality smoke eval:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.retrieval.evaluation
+```
+
+The default eval uses `tests/evals/retrieval/neon_fixture.json` and a temporary local database. Pass `--live` and `--dataset <path>` to evaluate an existing indexed source instead.
