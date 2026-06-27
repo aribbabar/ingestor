@@ -23,6 +23,7 @@ type SettingsPageProps = {
   updateStatus: DesktopUpdateStatus | null
   message: Message
   ollamaModels: OllamaModelsResponse | null
+  isDesktopAvailable: boolean
   isSavingSettings: boolean
   isSyncingSkills: boolean
   isSavingStartup: boolean
@@ -70,6 +71,7 @@ export function SettingsPage({
   updateStatus,
   message,
   ollamaModels,
+  isDesktopAvailable,
   isSavingSettings,
   isSyncingSkills,
   isSavingStartup,
@@ -270,118 +272,120 @@ export function SettingsPage({
         <MessageLine message={message} />
       </section>
 
-      <section className={styles.settingsPanel} aria-label="Desktop behavior">
-        <div className={styles.panelHeader}>
-          <div className={styles.panelTitle}>
-            <h2>Desktop</h2>
-            <p>Keep the local API available for agents after sign-in.</p>
-          </div>
-        </div>
-
-        <div className={styles.desktopRows}>
-          <label className={styles.toggleRow}>
-            <input
-              checked={Boolean(startupSettings?.openAtLogin)}
-              disabled={!startupSettings?.supported || isSavingStartup}
-              type="checkbox"
-              onChange={(event) => void onSetStartupEnabled(event.target.checked)}
-            />
-            <span>Start with Windows</span>
-          </label>
-          {!startupSettings?.supported ? (
-            <p className={styles.rowNote}>Startup control is available in the installed Windows app.</p>
-          ) : null}
-
-          <div className={styles.cliPathBlock}>
-            <div className={styles.cliPathHeader}>
-              <div>
-                <h3>Command line access</h3>
-                <p>
-                  {cliPathSettings?.inPath
-                    ? 'The Ingestor CLI folder is already on your user PATH.'
-                    : 'Add the Ingestor CLI folder to your user PATH or copy the folder path for manual setup.'}
-                </p>
+      {isDesktopAvailable ? (
+        <>
+          <section className={styles.settingsPanel} aria-label="Desktop behavior">
+            <div className={styles.panelHeader}>
+              <div className={styles.panelTitle}>
+                <h2>Desktop</h2>
+                <p>Keep the local API available for agents after sign-in.</p>
               </div>
-              <button
-                className={styles.saveButton}
-                disabled={!cliPathSettings?.supported || cliPathSettings.inPath || isAddingCliPath}
-                type="button"
-                onClick={() => void onAddCliToPath()}
-              >
-                {isAddingCliPath ? 'Adding...' : cliPathSettings?.inPath ? 'Added' : 'Add to PATH'}
-              </button>
             </div>
 
-            <div className={styles.cliPathControls}>
-              <input
-                aria-label="Ingestor CLI folder"
-                readOnly
-                value={cliPathSettings?.path || ''}
-                placeholder="CLI folder is available in the installed Windows app"
-                onFocus={(event) => event.currentTarget.select()}
-              />
+            <div className={styles.desktopRows}>
+              <label className={styles.toggleRow}>
+                <input
+                  checked={Boolean(startupSettings?.openAtLogin)}
+                  disabled={!startupSettings?.supported || isSavingStartup}
+                  type="checkbox"
+                  onChange={(event) => void onSetStartupEnabled(event.target.checked)}
+                />
+                <span>Start with Windows</span>
+              </label>
+              {!startupSettings?.supported ? (
+                <p className={styles.rowNote}>Startup control is available in the installed Windows app.</p>
+              ) : null}
+
+              <div className={styles.cliPathBlock}>
+                <div className={styles.cliPathHeader}>
+                  <div>
+                    <h3>Command line access</h3>
+                    <p>
+                      {cliPathSettings?.inPath
+                        ? 'The Ingestor CLI folder is already on your user PATH.'
+                        : 'Add the Ingestor CLI folder to your user PATH or copy the folder path for manual setup.'}
+                    </p>
+                  </div>
+                  <button
+                    className={styles.saveButton}
+                    disabled={!cliPathSettings?.supported || cliPathSettings.inPath || isAddingCliPath}
+                    type="button"
+                    onClick={() => void onAddCliToPath()}
+                  >
+                    {isAddingCliPath ? 'Adding...' : cliPathSettings?.inPath ? 'Added' : 'Add to PATH'}
+                  </button>
+                </div>
+
+                <div className={styles.cliPathControls}>
+                  <input
+                    aria-label="Ingestor CLI folder"
+                    readOnly
+                    value={cliPathSettings?.path || ''}
+                    placeholder="CLI folder is available in the installed Windows app"
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                  <button
+                    className={styles.secondaryButton}
+                    disabled={!cliPathSettings?.path}
+                    type="button"
+                    onClick={() => void onCopyCliPath()}
+                  >
+                    Copy
+                  </button>
+                </div>
+
+                {!cliPathSettings?.supported ? (
+                  <p className={styles.rowNote}>CLI PATH management is available in the installed Windows app.</p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.settingsPanel} aria-label="App updates">
+            <div className={styles.panelHeader}>
+              <div className={styles.panelTitle}>
+                <h2>Updates</h2>
+                <p>Check for signed Ingestor releases.</p>
+              </div>
               <button
                 className={styles.secondaryButton}
-                disabled={!cliPathSettings?.path}
+                disabled={isCheckingUpdate || isInstallingUpdate}
                 type="button"
-                onClick={() => void onCopyCliPath()}
+                onClick={() => void onCheckForUpdates()}
               >
-                Copy
+                {isCheckingUpdate ? 'Checking...' : 'Check'}
               </button>
             </div>
 
-            {!cliPathSettings?.supported ? (
-              <p className={styles.rowNote}>CLI PATH management is available in the installed Windows app.</p>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
-      <section className={styles.settingsPanel} aria-label="App updates">
-        <div className={styles.panelHeader}>
-          <div className={styles.panelTitle}>
-            <h2>Updates</h2>
-            <p>Check for signed Ingestor releases.</p>
-          </div>
-          <button
-            className={styles.secondaryButton}
-            disabled={!window.ingestorDesktop || isCheckingUpdate || isInstallingUpdate}
-            type="button"
-            onClick={() => void onCheckForUpdates()}
-          >
-            {isCheckingUpdate ? 'Checking...' : 'Check'}
-          </button>
-        </div>
-
-        <div className={styles.updateRows}>
-          {!window.ingestorDesktop ? (
-            <p className={styles.rowNote}>Updates are available in the installed Windows app.</p>
-          ) : updateStatus?.available ? (
-            <div className={styles.updateAvailable}>
-              <div>
-                <strong>Version {updateStatus.version} is available</strong>
-                <p>
-                  Current version: {updateStatus.currentVersion}
-                  {updateStatus.date ? ` - Published ${updateStatus.date}` : ''}
-                </p>
-                {updateStatus.body ? <p>{updateStatus.body}</p> : null}
-              </div>
-              <button
-                className={styles.saveButton}
-                disabled={isInstallingUpdate}
-                type="button"
-                onClick={() => void onInstallUpdate()}
-              >
-                {isInstallingUpdate ? 'Installing...' : 'Install update'}
-              </button>
+            <div className={styles.updateRows}>
+              {updateStatus?.available ? (
+                <div className={styles.updateAvailable}>
+                  <div>
+                    <strong>Version {updateStatus.version} is available</strong>
+                    <p>
+                      Current version: {updateStatus.currentVersion}
+                      {updateStatus.date ? ` - Published ${updateStatus.date}` : ''}
+                    </p>
+                    {updateStatus.body ? <p>{updateStatus.body}</p> : null}
+                  </div>
+                  <button
+                    className={styles.saveButton}
+                    disabled={isInstallingUpdate}
+                    type="button"
+                    onClick={() => void onInstallUpdate()}
+                  >
+                    {isInstallingUpdate ? 'Installing...' : 'Install update'}
+                  </button>
+                </div>
+              ) : updateStatus ? (
+                <p className={styles.rowNote}>Ingestor is up to date.</p>
+              ) : (
+                <p className={styles.rowNote}>No update check has run in this session.</p>
+              )}
             </div>
-          ) : updateStatus ? (
-            <p className={styles.rowNote}>Ingestor is up to date.</p>
-          ) : (
-            <p className={styles.rowNote}>No update check has run in this session.</p>
-          )}
-        </div>
-      </section>
+          </section>
+        </>
+      ) : null}
 
       <section className={styles.settingsPanel} aria-label="Agent skill sync">
         <div className={styles.panelHeader}>

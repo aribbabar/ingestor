@@ -344,6 +344,14 @@ function App() {
       showMessage('capture', { text: `A source named "${name}" already exists`, tone: 'error' })
       return
     }
+    const duplicate = findDuplicateLocalPath(sources, paths)
+    if (duplicate) {
+      showMessage('capture', {
+        text: `${duplicate.path} is already registered as "${duplicate.source.name}". Reindex or delete that source instead.`,
+        tone: 'error',
+      })
+      return
+    }
 
     setIsSubmitting(true)
     setMessage(null)
@@ -845,6 +853,7 @@ function App() {
               updateStatus={updateStatus}
               message={settingsMessage}
               ollamaModels={ollamaModels}
+              isDesktopAvailable={Boolean(window.ingestorDesktop)}
               isSavingSettings={isSavingSettings}
               isSyncingSkills={isSyncingSkills}
               isSavingStartup={isSavingStartup}
@@ -906,6 +915,31 @@ function splitPatternLines(value: string) {
 function isSourceNameTaken(sources: SourceRecord[], name: string) {
   const normalizedName = name.trim().toLocaleLowerCase()
   return sources.some((source) => source.name.trim().toLocaleLowerCase() === normalizedName)
+}
+
+function findDuplicateLocalPath(sources: SourceRecord[], paths: string[]) {
+  const selectedPathKeys = new Set(paths.map(pathKey))
+  for (const source of sources) {
+    if (source.kind !== 'local') continue
+    for (const sourcePath of sourceOriginalPaths(source)) {
+      if (selectedPathKeys.has(pathKey(sourcePath))) {
+        return { source, path: sourcePath }
+      }
+    }
+  }
+  return null
+}
+
+function sourceOriginalPaths(source: SourceRecord) {
+  const metadataPaths = source.metadata.original_paths
+  if (Array.isArray(metadataPaths)) {
+    return metadataPaths.map(String).filter(Boolean)
+  }
+  return source.location.split(';').map((path) => path.trim()).filter(Boolean)
+}
+
+function pathKey(path: string) {
+  return path.trim().replace(/[/\\]+$/, '').replaceAll('\\', '/').toLocaleLowerCase()
 }
 
 function loadStoredWebOptions(): Partial<WebForm> {

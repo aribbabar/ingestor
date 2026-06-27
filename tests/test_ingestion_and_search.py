@@ -16,6 +16,7 @@ from app.retrieval.embeddings import embedding_signature, tokenize
 from app.indexing.documents import clean_web_markdown, document_from_file, html_to_markdown, normalize_content
 from app.indexing.discovery import iter_files
 from app.indexing.chunking import CHUNK_TARGET_CHARS, build_document, split_markdown_sections, split_section_content
+import app.sources.service as source_service
 from app.sources.service import ignore_snapshot_entries
 from app.domain.models import SearchMode, SourceKind, SourceRecord
 from app.retrieval.search import assemble_context, diversify_by_document, extract_code, rank_lookup, shape_result
@@ -386,6 +387,36 @@ Thank you for your feedback!
 
 
 class VectorIndexTests(TestCase):
+    def test_duplicate_local_source_path_is_rejected_before_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            root = Path(directory)
+            docs = root / "docs"
+            docs.mkdir()
+            (docs / "guide.md").write_text("# Guide", encoding="utf-8")
+            snapshot_root = root / "local"
+            test_db = Database(root / "ingestor.sqlite")
+            original_db = source_service.db
+            original_get_settings = source_service.get_settings
+
+            class Settings:
+                local_source_dir = snapshot_root
+
+            try:
+                source_service.db = test_db
+                source_service.get_settings = lambda: Settings()
+                source_service.register_local_source(source_service.LocalSourceRequest(paths=[docs], name="docs"))
+
+                with self.assertRaisesRegex(ValueError, 'already registered as "docs"'):
+                    source_service.register_local_source(source_service.LocalSourceRequest(paths=[docs], name="docs-copy"))
+
+                snapshots = list(snapshot_root.iterdir())
+            finally:
+                source_service.db = original_db
+                source_service.get_settings = original_get_settings
+                test_db.engine.dispose()
+
+        self.assertEqual(len(snapshots), 1)
+
     def test_running_job_can_be_found_for_source(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             test_db = Database(Path(directory) / "ingestor.sqlite")

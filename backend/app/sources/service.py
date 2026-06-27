@@ -33,6 +33,10 @@ def register_local_source(request: LocalSourceRequest) -> SourceRecord:
         if not path.exists():
             raise FileNotFoundError(f"Path does not exist: {path}")
     name = require_unique_source_name(request.name)
+    duplicate = find_duplicate_local_path(paths)
+    if duplicate is not None:
+        path, source = duplicate
+        raise ValueError(f'{path} is already registered as "{source.name}". Reindex or delete that source instead.')
     source = SourceRecord(
         kind=SourceKind.LOCAL,
         name=name,
@@ -48,6 +52,28 @@ def register_local_source(request: LocalSourceRequest) -> SourceRecord:
         "paths": [str(path) for path in snapshot["snapshot_paths"]],
     }
     return db.upsert_source(source)
+
+
+def find_duplicate_local_path(paths: list[Path]) -> tuple[Path, SourceRecord] | None:
+    selected = {path_key(path) for path in paths}
+    for source in db.list_sources():
+        if source.kind != SourceKind.LOCAL:
+            continue
+        for original_path in local_source_original_paths(source):
+            if path_key(original_path) in selected:
+                return original_path, source
+    return None
+
+
+def local_source_original_paths(source: SourceRecord) -> list[Path]:
+    metadata_paths = source.metadata.get("original_paths")
+    if isinstance(metadata_paths, list):
+        return [Path(str(path)).expanduser().resolve() for path in metadata_paths if str(path).strip()]
+    return [Path(path.strip()).expanduser().resolve() for path in source.location.split(";") if path.strip()]
+
+
+def path_key(path: Path) -> str:
+    return str(path.expanduser().resolve()).casefold()
 
 
 def snapshot_local_paths(source: SourceRecord, paths: list[Path]) -> dict:
