@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
 def utc_now() -> datetime:
@@ -43,13 +43,14 @@ class EmbeddingIndexingStrategy(StrEnum):
 
 
 class LocalSourceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     paths: list[Path] = Field(default_factory=list)
-    path: Path | None = None
     name: str = Field(min_length=1, max_length=120)
     version: str | None = None
 
     def selected_paths(self) -> list[Path]:
-        return self.paths or ([self.path] if self.path else [])
+        return self.paths
 
 
 class WebSourceRequest(BaseModel):

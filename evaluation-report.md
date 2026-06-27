@@ -27,6 +27,8 @@
 | Fixed | Backend unavailable state | When the local API cannot be reached, the frontend shows a focused offline panel with the backend URL, desktop/dev startup guidance, and a retry action. Verified in the running browser UI. |
 | Fixed | Settings dropdown labels | Dropdown options now expose concise accessible names while keeping longer descriptions as secondary visible text/tooltips. Verified in the running browser UI. |
 | Partially fixed | Frontend service split | Frontend API calls moved out of `App.tsx` into `frontend/src/api.ts`; `App.tsx` still owns page state and can be split further later. |
+| Fixed | Local source request contract | Backend local-source registration now accepts `paths` only and rejects the legacy singular `path` field. Covered by tests. |
+| Fixed | Evaluation runtime cleanup | Removed the two evaluation sources, their jobs, and their local snapshot folders from the repo-local backend data. Verified by live API and filesystem checks. |
 
 Verification for the latest remediation pass:
 
@@ -39,6 +41,8 @@ Verification for the latest remediation pass:
 - Live API check: local job cancellation moved from `cancelling` to `cancelled`; completed local job reported `progress_current=3` and `progress_total=3`.
 - Live browser check: Sources page rendered row-level progress, Cancel/Cancelling states, and cleared stuck cancellation controls after finalization.
 - Live browser check: backend-offline panel rendered after stopping the daemon, Retry recovered after restarting the daemon, and Settings dropdown options exposed short accessible labels.
+- Live API/filesystem check: `test-src-tauri` and `eval-test-frontend-src-tauri` sources are absent, job count is `0`, and their `backend/data/local` snapshot folders no longer exist.
+- Live API check: singular `path` local-source registration payload now returns `422`; `paths` is the supported request field.
 
 ---
 
@@ -90,7 +94,7 @@ Verification for the latest remediation pass:
 - **Partially fixed.** Frontend state management is concentrated in `App.tsx`. API wrappers now live in `frontend/src/api.ts`, but `App.tsx` still mixes routing, view state, and orchestration. A future pass can extract hooks by feature area.
 - **Partially fixed.** TypeScript `API_BASE_URL` fallback chain is correct (`window.ingestorDesktop?.backendUrl ?? import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8765'`). The hard-coded local default remains intentional, but unreachable backend states are now surfaced explicitly in the UI.
 - **Fixed.** CSP is set to `null` in `tauri.conf.json`. This disables Content-Security Policy in the built app. It should be tightened before shipping, at minimum to `default-src 'self'; connect-src 'self' http://127.0.0.1:8765`.
-- **Backend `LocalSourceRequest` supports both `paths` and a legacy `path` field.** The API accepts `paths` while the model also exposes `path`. This should be deprecated or documented.
+- **Fixed.** Backend `LocalSourceRequest` supports both `paths` and a legacy `path` field. The model now accepts `paths` only and forbids extra fields, so singular `path` submissions fail validation instead of being treated as a compatibility path.
 - **Fixed.** `index_source` failures caught by `_run_job` are now emitted through the process logger with a traceback, while the existing job log/status path remains intact.
 
 ---
@@ -119,4 +123,4 @@ Verification for the latest remediation pass:
 
 ## Note on Runtime State
 
-The evaluation left two local sources registered (`test-src-tauri` and `eval-test-frontend-src-tauri`) and a long-running index job in the backend SQLite under `backend/data/`. Both index snapshots include the full `frontend/src-tauri/target` tree, so they consume noticeable disk space. Clean up these test sources if they are no longer needed.
+Fixed. The evaluation sources (`test-src-tauri` and `eval-test-frontend-src-tauri`), their jobs, and their local snapshot folders under `backend/data/local/` have been removed from the repo-local backend data.

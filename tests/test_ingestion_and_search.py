@@ -7,6 +7,8 @@ import sqlite3
 from pathlib import Path
 from unittest import TestCase, main
 
+from pydantic import ValidationError
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import app.retrieval.search as search_module
@@ -387,6 +389,10 @@ Thank you for your feedback!
 
 
 class VectorIndexTests(TestCase):
+    def test_local_source_request_rejects_legacy_path_field(self) -> None:
+        with self.assertRaises(ValidationError):
+            source_service.LocalSourceRequest(path=Path("docs"), name="docs")
+
     def test_duplicate_local_source_path_is_rejected_before_snapshot(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             root = Path(directory)
