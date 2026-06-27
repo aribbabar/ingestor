@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { AppHeader } from './components/layout/AppHeader/AppHeader'
@@ -10,13 +10,10 @@ import { SourcesPage } from './pages/SourcesPage/SourcesPage'
 import type {
   CliPathSettings,
   HealthResponse,
-  IndexJob,
   LocalForm,
   Message,
   OllamaModelsResponse,
   DesktopUpdateStatus,
-  SearchMode,
-  SearchResponse,
   SettingsResponse,
   SkillTargetsResponse,
   SourceMode,
@@ -27,23 +24,18 @@ import type {
 } from './types'
 import {
   API_BASE_URL,
-  cancelIndexJob,
-  deleteSource as deleteSourceRequest,
-  loadJob,
   loadSettingsBundle,
-  loadSources,
   pickFilesFromApi,
   pickFolderFromApi,
   registerLocalSource as registerLocalSourceRequest,
   registerWebSource as registerWebSourceRequest,
   resetSettings,
-  searchSource,
-  startIndexJob,
   syncSkills as syncSkillsRequest,
   updateEmbeddingIndexingSettings,
   updateEmbeddingSettings,
   updateRetrievalSettings,
 } from './api'
+import { useSourcesController } from './hooks/useSourcesController'
 import styles from './App.module.css'
 
 type AppMessage = Exclude<Message, null> & { view: ViewName }
@@ -158,10 +150,6 @@ function App() {
   const [cliPathSettings, setCliPathSettings] = useState<CliPathSettings | null>(null)
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null)
   const [ollamaModels, setOllamaModels] = useState<OllamaModelsResponse | null>(null)
-  const [sources, setSources] = useState<SourceRecord[]>([])
-  const [jobs, setJobs] = useState<IndexJob[]>([])
-  const [selectedSourceId, setSelectedSourceId] = useState('')
-  const [activeLogs, setActiveLogs] = useState('')
   const [mode, setMode] = useState<SourceMode>('local')
   const [localForm, setLocalForm] = useState<LocalForm>(initialLocalForm)
   const [webForm, setWebForm] = useState<WebForm>(() => ({
@@ -172,21 +160,12 @@ function App() {
   const [isPickingFiles, setIsPickingFiles] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [message, setMessage] = useState<AppMessage | null>(null)
-  const [query, setQuery] = useState('')
-  const [searchLimit, setSearchLimit] = useState(8)
-  const [searchMode, setSearchMode] = useState<SearchMode>('hybrid')
-  const [searchOutput, setSearchOutput] = useState<SearchResponse | null>(null)
-  const [isSearching, setIsSearching] = useState(false)
-  const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null)
-  const [sourcePendingDelete, setSourcePendingDelete] = useState<SourceRecord | null>(null)
-  const [reindexingSourceId, setReindexingSourceId] = useState<string | null>(null)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [isSyncingSkills, setIsSyncingSkills] = useState(false)
   const [isSavingStartup, setIsSavingStartup] = useState(false)
   const [isAddingCliPath, setIsAddingCliPath] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false)
-  const hasAppliedDefaultSearchMode = useRef(false)
 
   const activeView = useMemo((): ViewName => {
     if (location.pathname.startsWith('/sources')) return 'sources'
@@ -215,61 +194,56 @@ function App() {
     setMessage({ ...nextMessage, view })
   }, [])
 
+  const sourcesController = useSourcesController({ settings, showMessage })
+  const {
+    activeLogs,
+    applyInitialSearchMode,
+    applySavedSearchMode,
+    cancelJob,
+    clearSearchOutput,
+    deletePendingSource,
+    deletingSourceId,
+    isSearching,
+    jobs,
+    latestJob,
+    query,
+    recentSources,
+    refreshJob,
+    refreshSources,
+    reindexingSourceId,
+    reindexSource,
+    searchDocs,
+    searchableSources,
+    searchLimit,
+    searchMode,
+    searchOutput,
+    selectCreatedSource,
+    selectedSource,
+    selectSource,
+    setQuery,
+    setSearchLimit,
+    setSearchMode,
+    setSourcePendingDelete,
+    sortedSources,
+    sourcePendingDelete,
+    sources,
+    startIndexJobForSource,
+  } = sourcesController
+
   const captureMessage = message?.view === 'capture' ? message : null
   const sourcesMessage = message?.view === 'sources' ? message : null
   const settingsMessage = message?.view === 'settings' ? message : null
-
-  const sortedSources = useMemo(
-    () =>
-      [...sources].sort(
-        (left, right) =>
-          new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
-      ),
-    [sources],
-  )
-
-  const selectedSource = useMemo(
-    () =>
-      sources.find((source) => source.id === selectedSourceId) ??
-      sortedSources[0],
-    [selectedSourceId, sortedSources, sources],
-  )
-
-  const latestJob = useMemo(() => {
-    if (!selectedSource) return undefined
-    return jobs.find((job) => job.source_id === selectedSource.id)
-  }, [jobs, selectedSource])
-
-  const recentSources = sortedSources.slice(0, 5)
-  const searchableSources = useMemo(
-    () => sortedSources.filter((source) => isSourceQueryable(source, settings)),
-    [settings, sortedSources],
-  )
-
-  const refreshSources = useCallback(async () => {
-    const payload = await loadSources()
-    setSources(payload.sources)
-    setJobs(payload.jobs)
-    setSelectedSourceId((current) =>
-      current && payload.sources.some((source) => source.id === current)
-        ? current
-        : payload.sources[0]?.id || '',
-    )
-  }, [])
 
   const refreshSettings = useCallback(async () => {
     const { health: healthPayload, settings: settingsPayload, ollamaModels: modelsPayload, skillTargets: skillsPayload } =
       await loadSettingsBundle()
     setHealth(healthPayload)
     setSettings(settingsPayload)
-    if (!hasAppliedDefaultSearchMode.current) {
-      setSearchMode(settingsPayload.default_search_mode)
-      hasAppliedDefaultSearchMode.current = true
-    }
+    applyInitialSearchMode(settingsPayload.default_search_mode)
     setOllamaModels(modelsPayload)
     setSkillTargets(skillsPayload)
     setApiStatus('online')
-  }, [])
+  }, [applyInitialSearchMode])
 
   const refreshStartupSettings = useCallback(async () => {
     if (!window.ingestorDesktop) {
@@ -285,16 +259,6 @@ function App() {
       return
     }
     setCliPathSettings(await window.ingestorDesktop.getCliPathSettings())
-  }, [])
-
-  const refreshJob = useCallback(async (jobId: string) => {
-    try {
-      const payload = await loadJob(jobId)
-      setJobs((current) => [payload.job, ...current.filter((job) => job.id !== payload.job.id)])
-      setActiveLogs(payload.logs)
-    } catch {
-      return
-    }
   }, [])
 
   const loadAppData = useCallback(async () => {
@@ -322,15 +286,6 @@ function App() {
   }, [loadAppData])
 
   useEffect(() => {
-    if (!latestJob || !isActiveJob(latestJob)) return
-    const timer = window.setInterval(() => {
-      void refreshSources()
-      void refreshJob(latestJob.id)
-    }, 1500)
-    return () => window.clearInterval(timer)
-  }, [latestJob, refreshJob, refreshSources])
-
-  useEffect(() => {
     return window.ingestorDesktop?.onBackendStatus((status) => {
       if (!status.online) setApiStatus('offline')
     })
@@ -346,19 +301,9 @@ function App() {
     }
   }
 
-  function selectSource(sourceId: string) {
-    setSelectedSourceId(sourceId)
-    const job = jobs.find((currentJob) => currentJob.source_id === sourceId)
-    if (job) {
-      void refreshJob(job.id)
-    } else {
-      setActiveLogs('')
-    }
-  }
-
   function searchFromCapture(sourceId?: string) {
     if (sourceId) selectSource(sourceId)
-    setSearchOutput(null)
+    clearSearchOutput()
     navigate('/sources')
   }
 
@@ -393,8 +338,7 @@ function App() {
       const payload = await registerLocalSourceRequest(paths, name)
       const job = await startIndexJobForSource(payload.source.id)
       setLocalForm(initialLocalForm)
-      setSelectedSourceId(payload.source.id)
-      setActiveLogs('')
+      selectCreatedSource(payload.source.id)
       showMessage('capture', { text: `${payload.source.name} is indexing`, tone: 'success' })
       await refreshSources()
       await refreshJob(job.id)
@@ -434,8 +378,7 @@ function App() {
       })
       const job = await startIndexJobForSource(payload.source.id)
       setWebForm((current) => ({ ...current, url: '', name: '' }))
-      setSelectedSourceId(payload.source.id)
-      setActiveLogs('')
+      selectCreatedSource(payload.source.id)
       showMessage('capture', { text: `${payload.source.name} is indexing`, tone: 'success' })
       await refreshSources()
       await refreshJob(job.id)
@@ -523,107 +466,6 @@ function App() {
     }))
   }
 
-  async function startIndexJobForSource(sourceId: string) {
-    const payload = await startIndexJob(sourceId)
-    setJobs((current) => [payload.job, ...current.filter((job) => job.id !== payload.job.id)])
-    return payload.job
-  }
-
-  async function searchDocs(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const source = selectedSource
-    if (!source) return
-    if (!isSourceQueryable(source, settings)) {
-      setSearchOutput({
-        command: [],
-        stdout: '',
-        stderr: sourceQueryDisabledMessage(source, settings),
-        results: [],
-      })
-      return
-    }
-    setIsSearching(true)
-    setSearchOutput(null)
-
-    try {
-      setSearchOutput(await searchSource({
-        source_id: source.id,
-        query,
-        limit: searchLimit,
-        mode: searchMode,
-      }))
-    } catch (error) {
-      setSearchOutput({
-        command: [],
-        stdout: '',
-        stderr: error instanceof Error ? error.message : 'Search failed',
-        results: [],
-      })
-    } finally {
-      setIsSearching(false)
-    }
-  }
-
-  async function reindexSource(source: SourceRecord) {
-    setReindexingSourceId(source.id)
-    setMessage(null)
-    try {
-      const job = await startIndexJobForSource(source.id)
-      setSelectedSourceId(source.id)
-      setSearchOutput(null)
-      setActiveLogs('')
-      showMessage('sources', { text: `${source.name} is re-indexing`, tone: 'success' })
-      await refreshSources()
-      await refreshJob(job.id)
-    } catch (error) {
-      showMessage('sources', {
-        text: error instanceof Error ? error.message : 'Unable to start re-index',
-        tone: 'error',
-      })
-    } finally {
-      setReindexingSourceId(null)
-    }
-  }
-
-  async function cancelJob(job: IndexJob, view: ViewName = 'sources') {
-    setMessage(null)
-    try {
-      const payload = await cancelIndexJob(job.id)
-      setJobs((current) => [payload.job, ...current.filter((currentJob) => currentJob.id !== payload.job.id)])
-      setActiveLogs(payload.logs)
-      await refreshSources()
-      showMessage(view, { text: 'Index cancellation requested', tone: 'success' })
-    } catch (error) {
-      showMessage(view, {
-        text: error instanceof Error ? error.message : 'Unable to cancel indexing',
-        tone: 'error',
-      })
-    }
-  }
-
-  async function deleteSource() {
-    if (!sourcePendingDelete) return
-
-    const sourceId = sourcePendingDelete.id
-    setDeletingSourceId(sourceId)
-    setMessage(null)
-    try {
-      await deleteSourceRequest(sourceId)
-      setSearchOutput(null)
-      setActiveLogs('')
-      await refreshSources()
-      setSourcePendingDelete(null)
-      showMessage('sources', { text: 'Source deleted', tone: 'success' })
-    } catch (error) {
-      showMessage('sources', {
-        text: error instanceof Error ? error.message : 'Unable to delete source',
-        tone: 'error',
-      })
-    } finally {
-      setDeletingSourceId(null)
-    }
-  }
-
   async function saveSettings(request: SettingsSaveRequest) {
     setIsSavingSettings(true)
     setMessage(null)
@@ -651,9 +493,8 @@ function App() {
 
       if (nextSettings) {
         setSettings(nextSettings)
-        setSearchMode(nextSettings.default_search_mode)
+        applySavedSearchMode(nextSettings.default_search_mode)
       }
-      hasAppliedDefaultSearchMode.current = true
       showMessage('settings', { text: 'Settings saved', tone: 'success' })
     } catch (error) {
       showMessage('settings', {
@@ -879,7 +720,7 @@ function App() {
           confirmLabel="Delete source"
           isConfirming={deletingSourceId === sourcePendingDelete.id}
           onCancel={() => setSourcePendingDelete(null)}
-          onConfirm={() => void deleteSource()}
+          onConfirm={() => void deletePendingSource()}
         />
       ) : null}
     </div>
@@ -982,17 +823,6 @@ function isCrawlScope(value: unknown): value is WebForm['scope'] {
   return value === 'hostname' || value === 'subpages' || value === 'domain'
 }
 
-function isSourceQueryable(source: SourceRecord | undefined, settings: SettingsResponse | null) {
-  if (!source || source.status !== 'indexed') return false
-  const embedding = source.metadata.embedding
-  if (!settings || !isRecord(embedding)) return false
-  return embedding.provider === settings.embedding.provider && embedding.model === settings.embedding.model
-}
-
-function isActiveJob(job: IndexJob) {
-  return job.status === 'running' || job.status === 'cancelling'
-}
-
 function OfflineBackendState({
   isDesktopAvailable,
   onRetry,
@@ -1018,20 +848,6 @@ function OfflineBackendState({
       </button>
     </main>
   )
-}
-
-function sourceQueryDisabledMessage(source: SourceRecord, settings: SettingsResponse | null) {
-  const current = settings?.embedding.display_name ?? 'the current embedding model'
-  const embedding = source.metadata.embedding
-  if (!isRecord(embedding)) {
-    return `${source.name} must be re-indexed before searching because it has no embedding model metadata.`
-  }
-  const indexedWith = typeof embedding.display_name === 'string' ? embedding.display_name : 'a different embedding model'
-  return `${source.name} must be re-indexed before searching. It was indexed with ${indexedWith}, but the current embedding model is ${current}.`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 export default App
