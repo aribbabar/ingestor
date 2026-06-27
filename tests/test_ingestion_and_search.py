@@ -14,7 +14,7 @@ from app.indexing.crawler import markdown_from_result
 from app.db import Database
 from app.retrieval.embeddings import embedding_signature, tokenize
 from app.indexing.documents import clean_web_markdown, document_from_file, html_to_markdown, normalize_content
-from app.indexing.chunking import build_document
+from app.indexing.chunking import CHUNK_TARGET_CHARS, build_document, split_markdown_sections, split_section_content
 from app.domain.models import SearchMode, SourceKind, SourceRecord
 from app.retrieval.search import diversify_by_document, extract_code, rank_lookup, shape_result
 
@@ -194,6 +194,47 @@ Use this table to choose a command.
         self.assertEqual(chunk["metadata"]["document_title"], "Install")
         self.assertEqual(chunk["metadata"]["section_path"], ["Install"])
         self.assertEqual(chunk["metadata"]["chunk_kind"], "table")
+
+    def test_markdown_section_splitter_ignores_headings_inside_code_fences(self) -> None:
+        sections = split_markdown_sections(
+            """# Install
+
+```md
+## Not a real section
+```
+
+## Configure
+Use the settings page.
+"""
+        )
+
+        self.assertEqual([path for path, _content in sections], [["Install"], ["Install", "Configure"]])
+
+    def test_section_content_splits_large_text_but_keeps_code_block_intact(self) -> None:
+        repeated_text = " ".join(f"sentence {index} explains configuration." for index in range(140))
+        code = "```ts\nconst config = { enabled: true, retries: 3 };\n```"
+
+        pieces = split_section_content(f"# Configure\n\n{repeated_text}\n\n{code}")
+
+        self.assertGreater(len(pieces), 1)
+        self.assertTrue(any(code in piece for piece in pieces))
+        self.assertTrue(all(len(piece) <= CHUNK_TARGET_CHARS + 300 or code in piece for piece in pieces))
+
+    def test_greedy_merge_keeps_distinct_large_sections_separate(self) -> None:
+        first = " ".join(["alpha explains setup."] * 80)
+        second = " ".join(["beta explains runtime."] * 80)
+
+        document = build_document(
+            "docs/runtime.md",
+            "Runtime",
+            f"# Setup\n\n{first}\n\n# Runtime\n\n{second}",
+            embed=False,
+        )
+
+        titles = [chunk["title"] for chunk in document["chunks"]]
+
+        self.assertIn("Setup", titles)
+        self.assertIn("Runtime", titles)
 
 
 class CrawlMarkdownSelectionTests(TestCase):
