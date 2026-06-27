@@ -186,7 +186,15 @@ def create_web_source(request: WebSourceRequest) -> SourceRegistrationResponse:
 def index_source_route(source_id: str) -> dict:
     if db.get_source(source_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
-    return {"job": start_index_job(source_id)}
+    try:
+        return {"job": start_index_job(source_id)}
+    except RuntimeError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+
+
+@router.get("/sources/jobs")
+def list_jobs() -> dict:
+    return {"jobs": db.list_jobs()}
 
 
 @router.get("/sources/jobs/{job_id}")

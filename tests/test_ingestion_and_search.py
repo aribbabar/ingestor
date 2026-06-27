@@ -14,7 +14,9 @@ from app.indexing.crawler import markdown_from_result
 from app.db import Database
 from app.retrieval.embeddings import embedding_signature, tokenize
 from app.indexing.documents import clean_web_markdown, document_from_file, html_to_markdown, normalize_content
+from app.indexing.discovery import iter_files
 from app.indexing.chunking import CHUNK_TARGET_CHARS, build_document, split_markdown_sections, split_section_content
+from app.sources.service import ignore_snapshot_entries
 from app.domain.models import SearchMode, SourceKind, SourceRecord
 from app.retrieval.search import assemble_context, diversify_by_document, extract_code, rank_lookup, shape_result
 
@@ -170,6 +172,30 @@ Thank you for your feedback!
         self.assertIn("npm install ingestor", markdown)
         self.assertIn("- Run setup", markdown)
         self.assertNotIn("Sidebar", markdown)
+
+    def test_local_discovery_skips_build_and_runtime_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / "docs" / "guide.md").write_text("# Guide", encoding="utf-8")
+            (root / "target").mkdir()
+            (root / "target" / "fingerprint.json").write_text('{"artifact": true}', encoding="utf-8")
+            (root / ".venv").mkdir()
+            (root / ".venv" / "package.json").write_text('{"private": true}', encoding="utf-8")
+            (root / ".git").mkdir()
+            (root / ".git" / "config").write_text("[core]", encoding="utf-8")
+
+            discovered = [path.relative_to(root).as_posix() for path in iter_files(root)]
+
+        self.assertEqual(discovered, ["docs/guide.md"])
+
+    def test_snapshot_ignore_skips_heavy_artifact_directories(self) -> None:
+        ignored = ignore_snapshot_entries(
+            "docs",
+            ["docs", "target", ".git", ".venv", ".vscode", "node_modules", "README.md"],
+        )
+
+        self.assertEqual(ignored, {"target", ".git", ".venv", ".vscode", "node_modules"})
 
     def test_chunks_include_structural_metadata(self) -> None:
         document = build_document(
@@ -360,6 +386,26 @@ Thank you for your feedback!
 
 
 class VectorIndexTests(TestCase):
+    def test_running_job_can_be_found_for_source(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            test_db = Database(Path(directory) / "ingestor.sqlite")
+            try:
+                source = SourceRecord(
+                    id="running-source",
+                    kind=SourceKind.LOCAL,
+                    name="running-source",
+                    version="test",
+                    location="memory",
+                    metadata={"embedding": embedding_signature()},
+                )
+                test_db.upsert_source(source)
+
+                running_job = test_db.create_job(source.id)
+
+                self.assertEqual(test_db.find_running_job_for_source(source.id), running_job)
+            finally:
+                test_db.engine.dispose()
+
     def test_sqlite_vec_index_is_populated_during_ingestion(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             test_db = Database(Path(directory) / "ingestor.sqlite")

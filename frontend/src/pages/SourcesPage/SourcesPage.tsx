@@ -89,6 +89,7 @@ export function SourcesPage({
             {sources.map((source) => {
               const sourceQueryable = isSourceQueryable(source, settings)
               const metadata = sourceMetadata(source)
+              const metadataItems = sourceMetadataItems(metadata)
               const isReindexing = reindexingSourceId === source.id || source.status === 'indexing'
               return (
                 <div
@@ -104,12 +105,17 @@ export function SourcesPage({
                       <strong>{source.name}</strong>
                       <span title={source.location}>{source.location}</span>
                     </span>
-                    <dl className={styles.sourceDetails}>
-                      <Detail label="Embedding" value={metadata.embedding} />
-                      <Detail label="Indexed" value={metadata.finishedAt} />
-                      <Detail label="Duration" value={metadata.duration} />
-                      <Detail label="Strategy" value={metadata.strategy} />
-                    </dl>
+                    {metadataItems.length ? (
+                      <dl className={styles.sourceDetails}>
+                        {metadataItems.map((item) => (
+                          <Detail key={item.label} label={item.label} value={item.value} />
+                        ))}
+                      </dl>
+                    ) : (
+                      <span className={styles.sourcePendingDetail}>
+                        {source.status === 'indexing' ? 'Indexing metadata will appear when the job finishes.' : 'Not indexed yet.'}
+                      </span>
+                    )}
                   </button>
                   <span className={styles.sourceMeta}>
                     <Badge value={source.kind} variant={source.kind} />
@@ -255,11 +261,20 @@ function sourceMetadata(source: SourceRecord) {
   const embedding = isRecord(source.metadata.embedding) ? source.metadata.embedding : null
   const lastIndex = isRecord(source.metadata.last_index) ? source.metadata.last_index : null
   return {
-    embedding: stringValue(embedding?.display_name) ?? stringValue(embedding?.model) ?? 'Unknown',
+    embedding: stringValue(embedding?.display_name) ?? stringValue(embedding?.model),
     finishedAt: formatDateTime(stringValue(lastIndex?.finished_at)),
     duration: formatDuration(numberValue(lastIndex?.duration_seconds)),
     strategy: formatStrategy(lastIndex),
   }
+}
+
+function sourceMetadataItems(metadata: ReturnType<typeof sourceMetadata>) {
+  return [
+    { label: 'Embedding', value: metadata.embedding },
+    { label: 'Indexed', value: metadata.finishedAt },
+    { label: 'Duration', value: metadata.duration },
+    { label: 'Strategy', value: metadata.strategy },
+  ].filter((item): item is { label: string; value: string } => Boolean(item.value))
 }
 
 function sourceQueryDisabledMessage(source: SourceRecord, settings: SettingsResponse | null) {
@@ -268,7 +283,7 @@ function sourceQueryDisabledMessage(source: SourceRecord, settings: SettingsResp
   }
   const current = settings?.embedding.display_name ?? 'the current embedding model'
   const metadata = sourceMetadata(source)
-  if (metadata.embedding === 'Unknown') {
+  if (!metadata.embedding) {
     return `${source.name} must be re-indexed before searching because it has no embedding model metadata.`
   }
   return `${source.name} must be re-indexed before searching. It was indexed with ${metadata.embedding}, but the current embedding model is ${current}.`
@@ -281,16 +296,17 @@ function sourceCompatibilityLabel(source: SourceRecord, sourceQueryable: boolean
 }
 
 function formatStrategy(lastIndex: Record<string, unknown> | null) {
-  if (!lastIndex) return 'Unknown'
-  const strategy = stringValue(lastIndex.indexing_strategy) ?? 'Unknown'
+  if (!lastIndex) return undefined
+  const strategy = stringValue(lastIndex.indexing_strategy)
+  if (!strategy) return undefined
   const effectiveBatchSize = numberValue(lastIndex.effective_embedding_batch_size)
   return effectiveBatchSize ? `${strategy} / ${effectiveBatchSize}` : strategy
 }
 
 function formatDateTime(value: string | undefined) {
-  if (!value) return 'Unknown'
+  if (!value) return undefined
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Unknown'
+  if (Number.isNaN(date.getTime())) return undefined
   return date.toLocaleString(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -298,7 +314,7 @@ function formatDateTime(value: string | undefined) {
 }
 
 function formatDuration(value: number | undefined) {
-  if (value === undefined) return 'Unknown'
+  if (value === undefined) return undefined
   if (value < 1) return `${Math.round(value * 1000)} ms`
   if (value < 60) return `${value.toFixed(1)} s`
   const minutes = Math.floor(value / 60)

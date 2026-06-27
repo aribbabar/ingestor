@@ -11,6 +11,7 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.indexing.crawler import iter_web_documents
 from app.db import db
+from app.indexing.discovery import SKIP_DIRS as SNAPSHOT_SKIP_DIRS
 from app.retrieval.embeddings import embedding_signature, get_embedding_config, get_embedding_indexing_config
 from app.indexing.documents import iter_documents_from_paths
 from app.domain.models import (
@@ -82,8 +83,7 @@ def snapshot_local_paths(source: SourceRecord, paths: list[Path]) -> dict:
 
 
 def ignore_snapshot_entries(directory: str, names: list[str]) -> set[str]:
-    ignored_dirs = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__", "dist", "build"}
-    return {name for name in names if name in ignored_dirs}
+    return {name for name in names if name in SNAPSHOT_SKIP_DIRS}
 
 
 def unique_target_name(name: str, used_names: set[str]) -> str:
@@ -199,6 +199,10 @@ def index_source(source_id: str, job: JobRecord | None = None) -> SourceRecord:
 
 
 def start_index_job(source_id: str) -> JobRecord:
+    running_job = db.find_running_job_for_source(source_id)
+    if running_job is not None:
+        raise RuntimeError(f"Indexing is already running for this source as job {running_job.id}.")
+
     job = db.create_job(source_id)
     thread = threading.Thread(target=_run_job, args=(source_id, job), daemon=True)
     thread.start()

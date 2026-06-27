@@ -151,6 +151,16 @@ class Database:
             rows = session.exec(select(JobTable).order_by(JobTable.created_at.desc()).limit(50)).all()
         return [self._job_from_table(row) for row in rows]
 
+    def find_running_job_for_source(self, source_id: str) -> JobRecord | None:
+        with Session(self.engine) as session:
+            row = session.exec(
+                select(JobTable)
+                .where(JobTable.source_id == source_id, JobTable.status == JobStatus.RUNNING.value)
+                .order_by(JobTable.created_at.desc())
+                .limit(1)
+            ).first()
+        return self._job_from_table(row) if row else None
+
     def get_app_setting(self, key: str) -> str | None:
         with Session(self.engine) as session:
             row = session.get(AppSettingTable, key)

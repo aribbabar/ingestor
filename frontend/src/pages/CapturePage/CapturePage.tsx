@@ -176,6 +176,7 @@ export function CapturePage({
                 files.
               </span>
               <button
+                aria-label="Index selected local documentation"
                 className={styles.primaryButton}
                 disabled={isSubmitting}
                 type="submit"
@@ -317,6 +318,7 @@ export function CapturePage({
                 Uses Crawl4AI, then indexes cleaned markdown content directly.
               </span>
               <button
+                aria-label="Index website documentation"
                 className={styles.primaryButton}
                 disabled={isSubmitting}
                 type="submit"

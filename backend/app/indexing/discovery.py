@@ -19,7 +19,30 @@ SUPPORTED_SUFFIXES = {
     ".yml",
     ".toml",
 }
-SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__", "dist", "build"}
+SKIP_DIRS = {
+    ".cache",
+    ".codex",
+    ".git",
+    ".hg",
+    ".idea",
+    ".mypy_cache",
+    ".next",
+    ".nuxt",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "out",
+    "target",
+    "venv",
+}
 
 
 def documents_from_paths(paths: list[Path], uri_paths: list[Path] | None = None) -> list[dict]:

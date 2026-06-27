@@ -152,6 +152,13 @@
   white-space: nowrap;
 }
 
+.sourcePendingDetail {
+  color: var(--muted);
+  display: block;
+  font-size: var(--font-size-xs);
+  margin-top: var(--space-3);
+}
+
 .sourceMeta {
   align-items: center;
   display: flex;
