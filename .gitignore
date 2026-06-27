@@ -45,3 +45,4 @@ release/
 
 # Reference-only source material
 reference/
+tests/docs/

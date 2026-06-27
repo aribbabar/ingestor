@@ -191,4 +191,4 @@ cd backend
 .\.venv\Scripts\python.exe -m app.retrieval.evaluation
 ```
 
-The default eval uses `tests/evals/retrieval/neon_fixture.json` and a temporary local database. Pass `--live` and `--dataset <path>` to evaluate an existing indexed source instead.
+The default eval uses `tests/evals/retrieval/local_docs_fixture.json` and a temporary local database seeded from representative files under `tests/docs`. Pass `--dataset tests/evals/retrieval/neon_fixture.json` for the older inline Neon smoke fixture, or pass `--live` with `--dataset <path>` to evaluate an existing indexed source instead.

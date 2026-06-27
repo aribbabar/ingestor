@@ -14,11 +14,13 @@ from app import db as db_package
 from app.db import Database
 from app.domain.models import SearchMode, SourceKind, SourceRecord
 from app.indexing.chunking import build_document
+from app.indexing.discovery import document_from_file
 from app.retrieval import search as search_module
 from app.retrieval.embeddings import clear_embedding_config_cache, embedding_signature
 
 
-DEFAULT_DATASET = Path(__file__).resolve().parents[3] / "tests" / "evals" / "retrieval" / "neon_fixture.json"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_DATASET = REPO_ROOT / "tests" / "evals" / "retrieval" / "local_docs_fixture.json"
 
 
 @dataclass(frozen=True)
@@ -35,7 +37,7 @@ def run_retrieval_eval(options: EvalOptions) -> dict[str, Any]:
         return evaluate_dataset(dataset, options)
 
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
-        fixture_db = build_fixture_database(dataset, Path(directory) / "ingestor.sqlite")
+        fixture_db = build_fixture_database(dataset, Path(directory) / "ingestor.sqlite", options.dataset_path)
         try:
             with patched_app_database(fixture_db), patched_search_database(fixture_db):
                 return evaluate_dataset(dataset, options)
@@ -58,36 +60,153 @@ def load_dataset(path: Path) -> dict[str, Any]:
     return payload
 
 
-def build_fixture_database(dataset: dict[str, Any], path: Path) -> Database:
+def build_fixture_database(dataset: dict[str, Any], path: Path, dataset_path: Path) -> Database:
     fixture_db = Database(path)
-    source_payload = require_mapping(dataset.get("source"), "source")
-    documents = dataset.get("documents")
-    if not isinstance(documents, list) or not documents:
+    source_payloads = fixture_sources(dataset)
+    documents_by_source = fixture_documents_by_source(dataset, source_payloads)
+    if not any(documents_by_source.values()):
         raise ValueError("Fixture eval datasets must include documents unless --live is used")
 
-    built_documents = []
     with patched_app_database(fixture_db):
-        source = SourceRecord(
-            id=str(source_payload.get("id") or "fixture"),
-            kind=SourceKind(str(source_payload.get("kind") or SourceKind.LOCAL)),
-            name=str(source_payload.get("name") or "fixture"),
-            version=str(source_payload.get("version") or "eval"),
-            location=str(source_payload.get("location") or "fixture"),
-            metadata={"embedding": embedding_signature()},
-        )
-        fixture_db.upsert_source(source)
-        for index, document in enumerate(documents, start=1):
-            document_payload = require_mapping(document, f"documents[{index}]")
-            built_documents.append(
-                build_document(
-                    uri=str(document_payload["uri"]),
-                    title=str(document_payload["title"]),
-                    content=str(document_payload["content"]),
+        for source_index, source_payload in enumerate(source_payloads, start=1):
+            source = build_fixture_source(source_payload, source_index)
+            fixture_db.upsert_source(source)
+            built_documents = [
+                build_fixture_document(document_payload, label, dataset_path, source_payload)
+                for document_payload, label in documents_by_source[fixture_source_key(source_payload)]
+            ]
+            if not built_documents:
+                raise ValueError(
+                    f"Fixture source {source.name!r} must include documents unless --live is used"
+                )
+            fixture_db.replace_source_documents(source, built_documents)
+    return fixture_db
+
+
+def fixture_sources(dataset: dict[str, Any]) -> list[dict[str, Any]]:
+    sources = dataset.get("sources")
+    if sources is None:
+        return [require_mapping(dataset.get("source"), "source")]
+    if not isinstance(sources, list) or not sources:
+        raise ValueError("sources must be a non-empty list")
+    return [require_mapping(source, f"sources[{index}]") for index, source in enumerate(sources, start=1)]
+
+
+def build_fixture_source(source_payload: dict[str, Any], index: int) -> SourceRecord:
+    metadata = dict(source_payload["metadata"]) if isinstance(source_payload.get("metadata"), dict) else {}
+    metadata.setdefault("embedding", embedding_signature())
+    return SourceRecord(
+        id=str(source_payload.get("id") or f"fixture-{index}"),
+        kind=SourceKind(str(source_payload.get("kind") or SourceKind.LOCAL)),
+        name=str(source_payload.get("name") or source_payload.get("id") or f"fixture-{index}"),
+        version=str(source_payload.get("version") or "eval"),
+        location=str(source_payload.get("location") or source_payload.get("root") or "fixture"),
+        metadata=metadata,
+    )
+
+
+def fixture_documents_by_source(
+    dataset: dict[str, Any],
+    source_payloads: list[dict[str, Any]],
+) -> dict[str, list[tuple[dict[str, Any], str]]]:
+    source_lookup: dict[str, str] = {}
+    documents_by_source: dict[str, list[tuple[dict[str, Any], str]]] = {}
+    for index, source_payload in enumerate(source_payloads, start=1):
+        primary_key = fixture_source_key(source_payload)
+        documents_by_source[primary_key] = []
+        for alias in fixture_source_aliases(source_payload):
+            if alias in source_lookup and source_lookup[alias] != primary_key:
+                raise ValueError(f"Duplicate fixture source alias: {alias}")
+            source_lookup[alias] = primary_key
+
+        source_documents = source_payload.get("documents", [])
+        if source_documents is None:
+            source_documents = []
+        if not isinstance(source_documents, list):
+            raise ValueError(f"sources[{index}].documents must be a list")
+        for document_index, document in enumerate(source_documents, start=1):
+            documents_by_source[primary_key].append(
+                (
+                    require_mapping(document, f"sources[{index}].documents[{document_index}]"),
+                    f"sources[{index}].documents[{document_index}]",
                 )
             )
 
-        fixture_db.replace_source_documents(source, built_documents)
-    return fixture_db
+    top_level_documents = dataset.get("documents", [])
+    if top_level_documents is None:
+        top_level_documents = []
+    if not isinstance(top_level_documents, list):
+        raise ValueError("documents must be a list")
+    for document_index, document in enumerate(top_level_documents, start=1):
+        document_payload = require_mapping(document, f"documents[{document_index}]")
+        source_reference = optional_string(document_payload.get("source_id")) or optional_string(document_payload.get("source"))
+        if source_reference is None:
+            if len(source_payloads) != 1:
+                raise ValueError(f"documents[{document_index}] must specify source or source_id")
+            source_key = fixture_source_key(source_payloads[0])
+        else:
+            source_key = source_lookup.get(source_reference)
+            if source_key is None:
+                raise ValueError(f"documents[{document_index}] references unknown source: {source_reference}")
+        documents_by_source[source_key].append((document_payload, f"documents[{document_index}]"))
+
+    return documents_by_source
+
+
+def fixture_source_key(source_payload: dict[str, Any]) -> str:
+    return str(source_payload.get("id") or source_payload.get("name") or "fixture")
+
+
+def fixture_source_aliases(source_payload: dict[str, Any]) -> list[str]:
+    aliases = []
+    for value in (source_payload.get("id"), source_payload.get("name")):
+        text = optional_string(value)
+        if text and text not in aliases:
+            aliases.append(text)
+    return aliases or ["fixture"]
+
+
+def build_fixture_document(
+    document_payload: dict[str, Any],
+    label: str,
+    dataset_path: Path,
+    source_payload: dict[str, Any],
+) -> dict[str, Any]:
+    if "path" in document_payload:
+        path = resolve_fixture_path(document_payload["path"], dataset_path, label)
+        root_value = document_payload.get("root") or source_payload.get("root") or source_payload.get("location")
+        root = resolve_fixture_path(root_value, dataset_path, f"{label}.root") if root_value else path.parent
+        uri_root_value = document_payload.get("uri_root") or source_payload.get("uri_root") or source_payload.get("location")
+        uri_root = Path(str(uri_root_value)) if uri_root_value else None
+        document = document_from_file(path, root, uri_path=uri_root, embed=True)
+        if document is None:
+            raise ValueError(f"{label} is not a supported fixture document: {path}")
+        return document
+
+    for field in ("uri", "title", "content"):
+        if field not in document_payload:
+            raise ValueError(f"{label} must include {field!r} or use a path-backed document")
+    return build_document(
+        uri=str(document_payload["uri"]),
+        title=str(document_payload["title"]),
+        content=str(document_payload["content"]),
+    )
+
+
+def resolve_fixture_path(value: object, dataset_path: Path, label: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+
+    dataset_relative = (dataset_path.parent / raw).resolve()
+    if dataset_relative.exists():
+        return dataset_relative
+
+    repo_relative = (REPO_ROOT / raw).resolve()
+    if repo_relative.exists():
+        return repo_relative
+
+    raise ValueError(f"{label} does not exist: {value}")
 
 
 def evaluate_dataset(dataset: dict[str, Any], options: EvalOptions) -> dict[str, Any]:

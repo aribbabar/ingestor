@@ -1,0 +1,166 @@
+{
+  "name": "local-docs-smoke",
+  "description": "Deterministic retrieval fixture using representative files from cloned documentation repos in tests/docs.",
+  "sources": [
+    {
+      "id": "chakra-ui-eval",
+      "kind": "local",
+      "name": "chakra-ui-eval",
+      "version": "eval",
+      "location": "tests/docs/chakra-ui",
+      "documents": [
+        {
+          "path": "tests/docs/chakra-ui/skills/chakra-ui-builder/references/theming.md"
+        },
+        {
+          "path": "tests/docs/chakra-ui/skills/chakra-ui-builder/SKILL.md"
+        }
+      ]
+    },
+    {
+      "id": "tauri-eval",
+      "kind": "local",
+      "name": "tauri-eval",
+      "version": "eval",
+      "location": "tests/docs/tauri",
+      "documents": [
+        {
+          "path": "tests/docs/tauri/examples/resources/README.md"
+        },
+        {
+          "path": "tests/docs/tauri/ARCHITECTURE.md"
+        }
+      ]
+    },
+    {
+      "id": "litellm-eval",
+      "kind": "local",
+      "name": "litellm-eval",
+      "version": "eval",
+      "location": "tests/docs/litellm",
+      "documents": [
+        {
+          "path": "tests/docs/litellm/ARCHITECTURE.md"
+        },
+        {
+          "path": "tests/docs/litellm/litellm/router_strategy/adaptive_router/README.md"
+        }
+      ]
+    },
+    {
+      "id": "scikit-learn-eval",
+      "kind": "local",
+      "name": "scikit-learn-eval",
+      "version": "eval",
+      "location": "tests/docs/scikit-learn",
+      "documents": [
+        {
+          "path": "tests/docs/scikit-learn/doc/metadata_routing.rst"
+        },
+        {
+          "path": "tests/docs/scikit-learn/examples/developing_estimators/README.txt"
+        }
+      ]
+    },
+    {
+      "id": "unsloth-eval",
+      "kind": "local",
+      "name": "unsloth-eval",
+      "version": "eval",
+      "location": "tests/docs/unsloth",
+      "documents": [
+        {
+          "path": "tests/docs/unsloth/README.md"
+        },
+        {
+          "path": "tests/docs/unsloth/tests/qlora/README.md"
+        }
+      ]
+    },
+    {
+      "id": "hermes-agent-eval",
+      "kind": "local",
+      "name": "hermes-agent-eval",
+      "version": "eval",
+      "location": "tests/docs/hermes-agent",
+      "documents": [
+        {
+          "path": "tests/docs/hermes-agent/providers/README.md"
+        },
+        {
+          "path": "tests/docs/hermes-agent/website/docs/user-guide/features/provider-routing.md"
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "chakra-v3-theme-system",
+      "query": "Chakra UI theming reference system setup defineConfig createSystem defaultConfig",
+      "source": "chakra-ui-eval",
+      "mode": "hybrid",
+      "limit": 5,
+      "max_rank": 5,
+      "expected": {
+        "uri_contains": "theming.md"
+      }
+    },
+    {
+      "id": "tauri-bundle-resources",
+      "query": "Tauri bundle resources tauri.conf.json path_resolver Node.js asset",
+      "source": "tauri-eval",
+      "mode": "hybrid",
+      "limit": 5,
+      "max_rank": 3,
+      "expected": {
+        "uri_contains": "resources",
+        "terms": ["bundle resources", "path_resolver"]
+      }
+    },
+    {
+      "id": "litellm-adaptive-router",
+      "query": "LiteLLM adaptive router request-type-aware routing strategy model_list deployments",
+      "source": "litellm-eval",
+      "mode": "hybrid",
+      "limit": 5,
+      "max_rank": 3,
+      "expected": {
+        "uri_contains": "adaptive_router"
+      }
+    },
+    {
+      "id": "scikit-metadata-routing",
+      "query": "scikit-learn metadata routing GridSearchCV sample_weight set_fit_request cross_validate",
+      "source": "scikit-learn-eval",
+      "mode": "hybrid",
+      "limit": 5,
+      "max_rank": 3,
+      "expected": {
+        "uri_contains": "metadata_routing.rst",
+        "terms": ["metadata routing", "sample_weight"]
+      }
+    },
+    {
+      "id": "unsloth-qlora-merge",
+      "query": "Unsloth QLoRA train merge FastLanguageModel get_peft_model save_pretrained_merged",
+      "source": "unsloth-eval",
+      "mode": "hybrid",
+      "limit": 5,
+      "max_rank": 3,
+      "expected": {
+        "uri_contains": "qlora"
+      }
+    },
+    {
+      "id": "hermes-provider-routing",
+      "query": "Hermes provider_routing sort price only ignore order require_parameters data_collection",
+      "source": "hermes-agent-eval",
+      "mode": "hybrid",
+      "limit": 5,
+      "max_rank": 3,
+      "expected": {
+        "uri_contains": "provider-routing.md"
+      }
+    }
+  ]
+}
