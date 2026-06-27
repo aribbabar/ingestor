@@ -68,7 +68,7 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      aria-labelledby={titleId}
+      aria-label={title}
       aria-describedby={descriptionId}
       aria-modal="true"
       className={styles.backdrop}

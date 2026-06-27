@@ -354,6 +354,17 @@
   text-align: left;
 }
 
+.searchNotice {
+  background: oklch(98% 0.02 75);
+  border: 1px solid oklch(86% 0.08 75);
+  border-radius: var(--radius-md);
+  color: oklch(42% 0.1 65);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-body);
+  margin: calc(var(--space-3) * -1) 0 var(--space-5);
+  padding: var(--space-4) var(--space-5);
+}
+
 .inlineLinkButton {
   background: transparent;
   border: 0;

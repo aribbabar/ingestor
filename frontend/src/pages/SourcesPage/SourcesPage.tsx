@@ -70,6 +70,13 @@ export function SourcesPage({
 }: SourcesPageProps) {
   const staleCount = sources.filter((source) => source.status === 'indexed' && !isSourceQueryable(source, settings)).length
   const selectedSourceQueryable = isSourceQueryable(selectedSource, settings)
+  const selectedSourceJob = selectedSource ? jobs.find((job) => job.source_id === selectedSource.id) : undefined
+  const isSelectedSourceReindexing = Boolean(
+    selectedSource &&
+      (reindexingSourceId === selectedSource.id ||
+        selectedSource.status === 'indexing' ||
+        (selectedSourceJob && isActiveJob(selectedSourceJob))),
+  )
 
   return (
     <main>
@@ -238,6 +245,11 @@ export function SourcesPage({
             {isSearching ? 'Searching' : 'Search'}
           </button>
         </form>
+        {searchOutput && isSelectedSourceReindexing ? (
+          <div className={styles.searchNotice}>
+            Reindexing is running. Existing results remain visible and may be outdated until indexing finishes.
+          </div>
+        ) : null}
         <SearchResults output={searchOutput} />
       </section>
     </main>

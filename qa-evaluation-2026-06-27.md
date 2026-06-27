@@ -23,6 +23,11 @@ Additional fixes from the follow-up pass:
 - **UX-1:** The Settings Save button now uses native `disabled` when no save is available.
 - **CODE-5:** Added a route-level React Error Boundary with a Reload recovery action.
 
+Additional fixes from this pass:
+
+- **BUG-3 / BUG-6:** Reindexing the currently selected source no longer clears existing search results. Previous results remain visible with an outdated-results notice while indexing is active.
+- **UX-2:** `ConfirmDialog` now names the dialog directly with `aria-label={title}` while preserving the visible heading.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -33,8 +38,9 @@ Verification run after the fixes:
 | `npm --prefix frontend run lint` | Pass |
 | `npm --prefix frontend run build` | Pass |
 | Browser verification at `http://127.0.0.1:1420/#/settings` | Pass: Reset banner, confirmation dialog, cancel path, and Settings render verified |
+| Browser verification at `http://127.0.0.1:1420/#/sources` | Pass: search results stayed visible during Reindex, outdated-results notice appeared, delete dialog was named and cancelled safely |
 
-Still open from this report: BUG-3, BUG-6, UX-2, UX-4, UX-6 through UX-9, USA-2 through USA-7, the remaining performance items, and CODE-1, CODE-2, CODE-3, CODE-7, CODE-8, CODE-9, and CODE-10.
+Still open from this report: UX-4, UX-6 through UX-9, USA-2 through USA-7, the remaining performance items, and CODE-1, CODE-2, CODE-3, CODE-7, CODE-8, CODE-9, and CODE-10.
 
 ---
 

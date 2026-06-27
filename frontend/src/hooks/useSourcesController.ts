@@ -162,7 +162,9 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     try {
       const job = await startIndexJobForSource(source.id)
       setSelectedSourceId(source.id)
-      setSearchOutput(null)
+      if (selectedSource?.id !== source.id) {
+        setSearchOutput(null)
+      }
       setActiveLogs('')
       showMessage('sources', { text: `${source.name} is re-indexing`, tone: 'success' })
       await refreshSources()
@@ -175,7 +177,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     } finally {
       setReindexingSourceId(null)
     }
-  }, [refreshJob, refreshSources, showMessage, startIndexJobForSource])
+  }, [refreshJob, refreshSources, selectedSource?.id, showMessage, startIndexJobForSource])
 
   const cancelJob = useCallback(async (job: IndexJob, view: ViewName = 'sources') => {
     try {
