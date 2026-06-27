@@ -59,8 +59,20 @@ class ChunkTable(SQLModel, table=True):
     title: str = Field(sa_column=Column(Text, nullable=False))
     uri: str = Field(sa_column=Column(Text, nullable=False))
     content: str = Field(sa_column=Column(Text, nullable=False))
+    content_type: str = Field(default="markdown", sa_column=Column(String, nullable=False, server_default="markdown"))
+    parent_chunk_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
     section_path: str = Field(default="[]", sa_column=Column(Text, nullable=False, server_default="[]"))
     token_count: int = Field(sa_column=Column(Integer, nullable=False))
+    metadata_: str = Field(default="{}", sa_column=Column("metadata", Text, nullable=False, server_default="{}"))
+    embedding_provider: str = Field(
+        default="local-hashing",
+        sa_column=Column(String, nullable=False, server_default="local-hashing"),
+    )
+    embedding_model: str = Field(
+        default="local-hashing-256",
+        sa_column=Column(String, nullable=False, server_default="local-hashing-256"),
+    )
+    embedding_dimensions: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
     embedding: str = Field(sa_column=Column(Text, nullable=False))
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.retrieval.embeddings import embed_texts
+from app.retrieval.embeddings import embed_texts, embedding_signature
 
 
 def embed_pending_documents(documents: list[dict], chunks: list[dict], batch_size: int):
@@ -10,6 +10,7 @@ def embed_pending_documents(documents: list[dict], chunks: list[dict], batch_siz
 
 def embed_chunks(chunks: list[dict], batch_size: int) -> None:
     effective_batch_size = max(1, batch_size)
+    signature = embedding_signature()
     for start in range(0, len(chunks), effective_batch_size):
         batch = chunks[start : start + effective_batch_size]
         texts = [str(chunk.pop("embedding_text")) for chunk in batch]
@@ -18,4 +19,7 @@ def embed_chunks(chunks: list[dict], batch_size: int) -> None:
             raise RuntimeError("Embedding provider returned an unexpected number of vectors")
         for chunk, embedding in zip(batch, embeddings, strict=True):
             chunk["embedding"] = embedding
+            chunk["embedding_provider"] = signature["provider"]
+            chunk["embedding_model"] = signature["model"]
+            chunk["embedding_dimensions"] = len(embedding)
 

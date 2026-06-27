@@ -6,12 +6,14 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from sqlalchemy import delete, event, func, inspect
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.core.config import get_settings
 from app.db.models import AppSettingTable, ChunkTable, DocumentTable, JobTable, SourceTable, chunks_fts
 from app.domain.models import JobRecord, JobStatus, SourceKind, SourceRecord, SourceStatus, utc_now
 from app.retrieval import vector_index
+from app.retrieval.embeddings import embedding_signature
 
 
 class Database:
@@ -52,6 +54,13 @@ class Database:
             )
             vector_index.ensure_meta_table(connection.connection.driver_connection)
         self._ensure_column("chunks", "section_path", "TEXT NOT NULL DEFAULT '[]'")
+        self._ensure_column("chunks", "content_type", "TEXT NOT NULL DEFAULT 'markdown'")
+        self._ensure_column("chunks", "parent_chunk_id", "INTEGER")
+        self._ensure_column("chunks", "metadata", "TEXT NOT NULL DEFAULT '{}'")
+        self._ensure_column("chunks", "embedding_provider", "TEXT NOT NULL DEFAULT 'local-hashing'")
+        self._ensure_column("chunks", "embedding_model", "TEXT NOT NULL DEFAULT 'local-hashing-256'")
+        self._ensure_column("chunks", "embedding_dimensions", "INTEGER NOT NULL DEFAULT 0")
+        self._backfill_chunk_metadata_columns()
         self._ensure_vector_index()
 
     def upsert_source(self, source: SourceRecord) -> SourceRecord:
@@ -283,6 +292,15 @@ class Database:
 
         chunk_count = 0
         for chunk in document["chunks"]:
+            embedding = chunk.get("embedding", [])
+            embedding_meta = chunk_embedding_metadata(chunk, embedding)
+            chunk_metadata = {
+                **safe_metadata(chunk.get("metadata")),
+                "source_id": source_id,
+                "document_uri": document["uri"],
+                "document_title": document["title"],
+                "document_id": document_row.id,
+            }
             chunk_row = ChunkTable(
                 source_id=source_id,
                 document_id=document_row.id,
@@ -290,15 +308,21 @@ class Database:
                 title=chunk["title"],
                 uri=chunk["uri"],
                 content=chunk["content"],
+                content_type=str(chunk.get("content_type") or chunk_metadata.get("content_type") or "markdown"),
+                parent_chunk_id=chunk.get("parent_chunk_id"),
                 section_path=json.dumps(chunk.get("section_path", [])),
                 token_count=chunk["token_count"],
-                embedding=json.dumps(chunk["embedding"]),
+                metadata_=json.dumps(chunk_metadata),
+                embedding_provider=embedding_meta["provider"],
+                embedding_model=embedding_meta["model"],
+                embedding_dimensions=embedding_meta["dimensions"],
+                embedding=json.dumps(embedding),
             )
             session.add(chunk_row)
             session.flush()
             if chunk_row.id is None:
                 raise RuntimeError("Chunk insert did not return an id")
-            vector_index.insert_row(session, chunk_row.id, source_id, chunk["embedding"])
+            vector_index.insert_row(session, chunk_row.id, source_id, embedding)
             session.execute(
                 chunks_fts.insert().values(
                     rowid=chunk_row.id,
@@ -320,6 +344,45 @@ class Database:
             vector_rows = [(int(chunk_id), str(source_id), embedding) for chunk_id, source_id, embedding in rows]
             vector_index.rebuild(session, vector_rows)
             session.commit()
+
+    def _backfill_chunk_metadata_columns(self) -> None:
+        with Session(self.engine) as session:
+            source_rows = session.exec(select(SourceTable)).all()
+            embedding_by_source = {
+                row.id: safe_metadata(safe_json_object(row.metadata_).get("embedding"))
+                for row in source_rows
+            }
+            chunk_rows = session.exec(select(ChunkTable)).all()
+            changed = False
+            for chunk in chunk_rows:
+                source_embedding = embedding_by_source.get(chunk.source_id) or {}
+                vector = vector_index.parse_embedding(chunk.embedding)
+                if chunk.embedding_dimensions == 0 and vector is not None:
+                    chunk.embedding_dimensions = len(vector)
+                    changed = True
+                if source_embedding and chunk.embedding_provider == "local-hashing":
+                    provider = source_embedding.get("provider")
+                    model = source_embedding.get("model")
+                    if (
+                        isinstance(provider, str)
+                        and isinstance(model, str)
+                        and (chunk.embedding_provider != provider or chunk.embedding_model != model)
+                    ):
+                        chunk.embedding_provider = provider
+                        chunk.embedding_model = model
+                        changed = True
+                if not chunk.metadata_ or chunk.metadata_ == "{}":
+                    chunk.metadata_ = json.dumps(
+                        {
+                            "source_id": chunk.source_id,
+                            "document_uri": chunk.uri,
+                            "section_path": safe_json_list(chunk.section_path),
+                            "content_type": chunk.content_type,
+                        }
+                    )
+                    changed = True
+            if changed:
+                session.commit()
 
     def _source_from_table(self, row: SourceTable) -> SourceRecord:
         return SourceRecord(
@@ -354,10 +417,48 @@ class Database:
         columns = {item["name"] for item in inspect(self.engine).get_columns(table)}
         if column not in columns:
             with self.engine.begin() as connection:
-                connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+                try:
+                    connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+                except OperationalError as error:
+                    if "duplicate column name" not in str(error).lower():
+                        raise
 
     def _enum_value(self, value: object) -> str:
         return str(getattr(value, "value", value))
+
+
+def chunk_embedding_metadata(chunk: dict, embedding: object) -> dict[str, object]:
+    provider = chunk.get("embedding_provider")
+    model = chunk.get("embedding_model")
+    if not isinstance(provider, str) or not isinstance(model, str):
+        signature = embedding_signature()
+        provider = signature["provider"]
+        model = signature["model"]
+    vector = vector_index.parse_embedding(embedding)
+    dimensions = chunk.get("embedding_dimensions")
+    if not isinstance(dimensions, int) or dimensions < 0:
+        dimensions = len(vector) if vector is not None else 0
+    return {"provider": provider, "model": model, "dimensions": dimensions}
+
+
+def safe_metadata(value: object) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def safe_json_object(value: object) -> dict:
+    try:
+        parsed = json.loads(str(value or "{}"))
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def safe_json_list(value: object) -> list[object]:
+    try:
+        parsed = json.loads(str(value or "[]"))
+    except json.JSONDecodeError:
+        return []
+    return parsed if isinstance(parsed, list) else []
 
 
 db = Database()

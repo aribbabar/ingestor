@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import sqlite3
@@ -13,6 +14,7 @@ from app.indexing.crawler import markdown_from_result
 from app.db import Database
 from app.retrieval.embeddings import embedding_signature, tokenize
 from app.indexing.documents import clean_web_markdown, document_from_file, html_to_markdown, normalize_content
+from app.indexing.chunking import build_document
 from app.domain.models import SearchMode, SourceKind, SourceRecord
 from app.retrieval.search import diversify_by_document, extract_code, rank_lookup, shape_result
 
@@ -168,6 +170,30 @@ Thank you for your feedback!
         self.assertIn("npm install ingestor", markdown)
         self.assertIn("- Run setup", markdown)
         self.assertNotIn("Sidebar", markdown)
+
+    def test_chunks_include_structural_metadata(self) -> None:
+        document = build_document(
+            "docs/install.md",
+            "Install",
+            """# Install
+
+Use this table to choose a command.
+
+| Runtime | Command |
+| --- | --- |
+| npm | npm install ingestor |
+""",
+            embed=False,
+        )
+
+        chunk = document["chunks"][0]
+
+        self.assertEqual(chunk["content_type"], "markdown")
+        self.assertEqual(chunk["parent_chunk_id"], None)
+        self.assertEqual(chunk["metadata"]["document_uri"], "docs/install.md")
+        self.assertEqual(chunk["metadata"]["document_title"], "Install")
+        self.assertEqual(chunk["metadata"]["section_path"], ["Install"])
+        self.assertEqual(chunk["metadata"]["chunk_kind"], "table")
 
 
 class CrawlMarkdownSelectionTests(TestCase):
@@ -325,6 +351,14 @@ class VectorIndexTests(TestCase):
                     dimensions = connection.execute(
                         "SELECT value FROM vector_index_meta WHERE key = 'dimensions'"
                     ).fetchone()[0]
+                    chunk_metadata = connection.execute(
+                        """
+                        SELECT content_type, parent_chunk_id, metadata, embedding_provider,
+                               embedding_model, embedding_dimensions
+                        FROM chunks
+                        WHERE title = 'Alpha'
+                        """
+                    ).fetchone()
 
                 original_db = search_module.db
                 search_module.db = test_db
@@ -339,6 +373,14 @@ class VectorIndexTests(TestCase):
         self.assertEqual(dimensions, "3")
         self.assertEqual(list(results), [1, 2])
         self.assertGreater(results[1], results[2])
+        self.assertEqual(chunk_metadata["content_type"], "markdown")
+        self.assertIsNone(chunk_metadata["parent_chunk_id"])
+        self.assertEqual(chunk_metadata["embedding_provider"], embedding_signature()["provider"])
+        self.assertEqual(chunk_metadata["embedding_model"], embedding_signature()["model"])
+        self.assertEqual(chunk_metadata["embedding_dimensions"], 3)
+        stored_metadata = json.loads(chunk_metadata["metadata"])
+        self.assertEqual(stored_metadata["source_id"], "vec-source")
+        self.assertEqual(stored_metadata["document_uri"], "vectors.md")
 
     def test_sqlite_vec_index_is_backfilled_for_existing_chunks(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
