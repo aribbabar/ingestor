@@ -131,7 +131,9 @@ export function SourcesPage({
                   >
                     <span className={styles.sourceIdentity}>
                       <strong>{source.name}</strong>
-                      <span title={source.location}>{source.location}</span>
+                      <span className={styles.sourceLocation} title={source.location}>
+                        {source.location}
+                      </span>
                     </span>
                     {sourceJob && isActiveJob(sourceJob) ? <JobProgress job={sourceJob} source={source} /> : null}
                     {metadataItems.length ? (

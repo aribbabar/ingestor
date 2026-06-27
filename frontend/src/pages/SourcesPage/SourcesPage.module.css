@@ -88,35 +88,61 @@
   border-color: var(--accent);
 }
 
+.sourceList > div:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-ring-size) var(--accent-soft);
+}
+
 .sourceList > div.staleSource {
   border-color: color-mix(in oklch, var(--danger) 36%, var(--border));
 }
 
+.sourceList > div.staleSource:focus-within {
+  border-color: var(--accent);
+}
+
 .sourceSelect {
   background: transparent;
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   color: inherit;
   cursor: pointer;
+  display: block;
   min-width: 0;
-  padding: var(--space-1) 0;
+  outline: none;
+  padding: var(--space-2) var(--space-3);
   text-align: left;
+  width: 100%;
+}
+
+.sourceSelect:focus-visible {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .sourceIdentity {
   display: grid;
   gap: var(--space-1);
   min-width: 0;
+  width: 100%;
 }
 
 .sourceIdentity strong {
   font-size: var(--font-size-md);
   font-weight: 650;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.sourceIdentity span {
+.sourceLocation {
+  display: block;
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -44,6 +44,10 @@ Local reindex correctness fixes from this pass:
 
 - **CODE-8 from the fresh QA report:** Local reindex now refreshes the stored snapshot from `original_paths` when the original files are available, so changed local docs are indexed instead of reusing stale snapshot content.
 
+Source-list polish fixes from this pass:
+
+- **UX-8 from the fresh QA report:** Source names and paths now ellipsize within the source selector, and focused source rows show a clear accent focus ring.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -59,6 +63,7 @@ Verification run after the fixes:
 | `rg -n "App\\.css|function jobProgress|function formatEta" frontend\src` | Pass: only shared `frontend/src/utils/jobProgress.ts` defines progress helpers |
 | Browser verification at `http://127.0.0.1:1420/#/sources` search states | Pass: initial "No search has been run yet" and completed "No matching results" states verified |
 | Browser verification at `http://127.0.0.1:1420/#/capture` web tab | Pass: Index website action appears before expanded Advanced crawl options and the advanced fields remain visible below it |
+| Browser verification at `http://127.0.0.1:1420/#/sources` at 980px viewport | Pass: source location uses hidden overflow/ellipsis/nowrap and focused source row shows an accent focus ring |
 
 Still open from this report: UX-4 and the remaining lower-priority cleanup/performance items.
 
