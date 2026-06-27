@@ -16,7 +16,7 @@ from app.retrieval.embeddings import embedding_signature, tokenize
 from app.indexing.documents import clean_web_markdown, document_from_file, html_to_markdown, normalize_content
 from app.indexing.chunking import CHUNK_TARGET_CHARS, build_document, split_markdown_sections, split_section_content
 from app.domain.models import SearchMode, SourceKind, SourceRecord
-from app.retrieval.search import diversify_by_document, extract_code, rank_lookup, shape_result
+from app.retrieval.search import assemble_context, diversify_by_document, extract_code, rank_lookup, shape_result
 
 
 def make_search_row(
@@ -194,6 +194,8 @@ Use this table to choose a command.
         self.assertEqual(chunk["metadata"]["document_title"], "Install")
         self.assertEqual(chunk["metadata"]["section_path"], ["Install"])
         self.assertEqual(chunk["metadata"]["chunk_kind"], "table")
+        self.assertIsInstance(chunk["metadata"]["parent_key"], str)
+        self.assertIn("Use this table", chunk["metadata"]["parent_context"])
 
     def test_markdown_section_splitter_ignores_headings_inside_code_fences(self) -> None:
         sections = split_markdown_sections(
@@ -464,6 +466,57 @@ class VectorIndexTests(TestCase):
                 rebuilt_db.engine.dispose()
 
         self.assertEqual(vec_count, 1)
+
+
+class RetrievalContextTests(TestCase):
+    def test_assemble_context_prefers_parent_section_context(self) -> None:
+        first_part = " ".join(["Parent setup background explains the larger section."] * 70)
+        second_part = " ".join(["Needle transaction detail uses websocket sessions."] * 70)
+        document = build_document(
+            "docs/serverless.md",
+            "Serverless",
+            f"# Serverless driver\n\n{first_part}\n\n{second_part}",
+            embed=False,
+        )
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            test_db = Database(Path(directory) / "ingestor.sqlite")
+            try:
+                source = SourceRecord(
+                    id="ctx-source",
+                    kind=SourceKind.LOCAL,
+                    name="ctx-source",
+                    version="test",
+                    location="memory",
+                    metadata={"embedding": embedding_signature()},
+                )
+                test_db.upsert_source(source)
+                test_db.replace_source_documents(source, [document])
+
+                with test_db.connect() as connection:
+                    row = connection.execute(
+                        """
+                        SELECT chunks.*, sources.name AS source_name
+                        FROM chunks
+                        JOIN sources ON sources.id = chunks.source_id
+                        WHERE chunks.content LIKE ?
+                        ORDER BY chunks.ordinal DESC
+                        LIMIT 1
+                        """,
+                        ("%Needle transaction detail%",),
+                    ).fetchone()
+
+                original_db = search_module.db
+                search_module.db = test_db
+                try:
+                    context = assemble_context(row)
+                finally:
+                    search_module.db = original_db
+            finally:
+                test_db.engine.dispose()
+
+        self.assertIn("Parent setup background", context)
+        self.assertIn("Needle transaction detail", context)
 
 
 class NeonRetrievalSmokeTests(TestCase):

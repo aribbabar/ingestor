@@ -14,6 +14,7 @@ CHUNK_TARGET_CHARS = 1400
 CHUNK_OVERLAP_CHARS = 200
 CHUNK_MIN_CHARS = 450
 CHUNK_MAX_CHARS = 2200
+PARENT_CONTEXT_MAX_CHARS = 4800
 CODE_BLOCK_RE = re.compile(r"```[\s\S]*?```")
 FENCE_START_RE = re.compile(r"^\s*```")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
@@ -64,6 +65,7 @@ def build_chunks(uri: str, title: str, content: str, embed: bool = True) -> list
                     section_path=section_path,
                     content_type=content_type,
                     content=piece,
+                    parent_content=section_content,
                 ),
                 "embedding_text": f"{chunk_title}\n{piece}",
             }
@@ -81,14 +83,55 @@ def chunk_metadata(
     section_path: list[str],
     content_type: str,
     content: str,
+    parent_content: str | None = None,
 ) -> dict[str, object]:
+    parent_text = parent_content or content
     return {
         "document_uri": uri,
         "document_title": title,
         "section_path": section_path,
         "content_type": content_type,
         "chunk_kind": infer_chunk_kind(content),
+        "parent_key": parent_key(uri, section_path, parent_text),
+        "parent_section_path": section_path,
+        "parent_context": bounded_parent_context(parent_text, content),
     }
+
+
+def parent_key(uri: str, section_path: list[str], content: str) -> str:
+    key_source = "\n".join([uri, *section_path, content])
+    return hashlib.sha1(key_source.encode("utf-8")).hexdigest()[:16]
+
+
+def bounded_parent_context(parent_content: str, child_content: str) -> str:
+    parent = parent_content.strip()
+    if len(parent) <= PARENT_CONTEXT_MAX_CHARS:
+        return parent
+
+    child = child_content.strip()
+    index = parent.find(child[: min(len(child), 200)]) if child else -1
+    if index < 0:
+        return trim_at_boundary(parent[:PARENT_CONTEXT_MAX_CHARS])
+
+    half_window = PARENT_CONTEXT_MAX_CHARS // 2
+    start = max(0, index - half_window)
+    end = min(len(parent), start + PARENT_CONTEXT_MAX_CHARS)
+    start = max(0, end - PARENT_CONTEXT_MAX_CHARS)
+    context = parent[start:end]
+    if start > 0:
+        boundary = max(context.find("\n\n"), context.find(". "))
+        if 0 <= boundary < len(context) // 3:
+            context = context[boundary + 1 :].lstrip()
+    if end < len(parent):
+        context = trim_at_boundary(context)
+    return context.strip()
+
+
+def trim_at_boundary(text: str) -> str:
+    cutoff = max(text.rfind("\n\n"), text.rfind(". "))
+    if cutoff < len(text) // 2:
+        return text.rstrip()
+    return text[:cutoff].rstrip(" .") + "."
 
 
 def infer_content_type(uri: str) -> str:

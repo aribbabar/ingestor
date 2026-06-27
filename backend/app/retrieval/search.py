@@ -464,6 +464,10 @@ def diversify_by_document(
 
 
 def assemble_context(row: sqlite3.Row) -> str:
+    parent_context = parent_context_from_row(row)
+    if parent_context:
+        return parent_context
+
     with db.connect() as connection:
         rows = connection.execute(
             """
@@ -491,6 +495,34 @@ def assemble_context(row: sqlite3.Row) -> str:
             parts.append(content)
             seen.add(content)
     return "\n\n".join(parts) or row["content"]
+
+
+def parent_context_from_row(row: sqlite3.Row) -> str:
+    metadata = parse_metadata(row_value(row, "metadata"))
+    parent_context = metadata.get("parent_context")
+    if not isinstance(parent_context, str):
+        return ""
+    parent_context = parent_context.strip()
+    if not parent_context:
+        return ""
+    chunk_content = str(row_value(row, "content") or "").strip()
+    if chunk_content and chunk_content not in parent_context:
+        return ""
+    return parent_context
+
+
+def parse_metadata(value: object) -> dict[str, object]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(str(value))
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def row_value(row: sqlite3.Row, key: str) -> object:
+    return row[key] if key in row.keys() else None
 
 
 def parse_section_path(value: object) -> list[str]:
