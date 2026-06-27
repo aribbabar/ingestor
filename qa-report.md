@@ -36,6 +36,10 @@ Search-state fixes from this pass:
 
 - **UX-5 / USA-2:** Search now distinguishes the initial empty state, in-flight searches, and completed zero-match searches. Previous results stay visible while a new search is running.
 
+Capture layout fixes from this pass:
+
+- **UX-6:** Moved the web indexing submit action above Advanced crawl options so the primary action stays reachable when the details panel is expanded.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -49,8 +53,9 @@ Verification run after the fixes:
 | Browser verification at `http://127.0.0.1:1420/#/sources` | Pass: search results stayed visible during Reindex, outdated-results notice appeared, delete dialog was named and cancelled safely |
 | `rg -n "App\\.css|function jobProgress|function formatEta" frontend\src` | Pass: only shared `frontend/src/utils/jobProgress.ts` defines progress helpers |
 | Browser verification at `http://127.0.0.1:1420/#/sources` search states | Pass: initial "No search has been run yet" and completed "No matching results" states verified |
+| Browser verification at `http://127.0.0.1:1420/#/capture` web tab | Pass: Index website action appears before expanded Advanced crawl options and the advanced fields remain visible below it |
 
-Still open from this report: UX-4, UX-6, and the remaining lower-priority cleanup/performance items.
+Still open from this report: UX-4 and the remaining lower-priority cleanup/performance items.
 
 ---
 

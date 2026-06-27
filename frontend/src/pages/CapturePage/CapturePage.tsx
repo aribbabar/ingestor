@@ -219,6 +219,19 @@ export function CapturePage({
                 value={webForm.name}
               />
             </div>
+            <div className={styles.formActions}>
+              <span className={styles.hint}>
+                Uses Crawl4AI, then indexes cleaned markdown content directly.
+              </span>
+              <button
+                aria-label="Index website documentation"
+                className={styles.primaryButton}
+                disabled={isSubmitting}
+                type="submit"
+              >
+                {isSubmitting ? "Starting" : "Index website"}
+              </button>
+            </div>
             <details className={styles.advancedOptions}>
               <summary>Advanced crawl options</summary>
               <div className={styles.advancedIntro}>
@@ -317,19 +330,6 @@ export function CapturePage({
                 </div>
               </div>
             </details>
-            <div className={styles.formActions}>
-              <span className={styles.hint}>
-                Uses Crawl4AI, then indexes cleaned markdown content directly.
-              </span>
-              <button
-                aria-label="Index website documentation"
-                className={styles.primaryButton}
-                disabled={isSubmitting}
-                type="submit"
-              >
-                {isSubmitting ? "Starting" : "Index website"}
-              </button>
-            </div>
             <MessageLine message={message} />
           </form>
         )}
