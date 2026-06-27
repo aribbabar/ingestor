@@ -5,36 +5,23 @@ import { AppHeader } from './components/layout/AppHeader/AppHeader'
 import { ConfirmDialog } from './components/ui/ConfirmDialog/ConfirmDialog'
 import { CapturePage } from './pages/CapturePage/CapturePage'
 import { SettingsPage } from './pages/SettingsPage/SettingsPage'
-import type { SettingsSaveRequest } from './pages/SettingsPage/SettingsPage'
 import { SourcesPage } from './pages/SourcesPage/SourcesPage'
 import type {
-  CliPathSettings,
-  HealthResponse,
   LocalForm,
   Message,
-  OllamaModelsResponse,
-  DesktopUpdateStatus,
-  SettingsResponse,
-  SkillTargetsResponse,
   SourceMode,
   SourceRecord,
-  StartupSettings,
   ViewName,
   WebForm,
 } from './types'
 import {
   API_BASE_URL,
-  loadSettingsBundle,
   pickFilesFromApi,
   pickFolderFromApi,
   registerLocalSource as registerLocalSourceRequest,
   registerWebSource as registerWebSourceRequest,
-  resetSettings,
-  syncSkills as syncSkillsRequest,
-  updateEmbeddingIndexingSettings,
-  updateEmbeddingSettings,
-  updateRetrievalSettings,
 } from './api'
+import { useSettingsController } from './hooks/useSettingsController'
 import { useSourcesController } from './hooks/useSourcesController'
 import styles from './App.module.css'
 
@@ -143,13 +130,6 @@ function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking')
-  const [, setHealth] = useState<HealthResponse | null>(null)
-  const [settings, setSettings] = useState<SettingsResponse | null>(null)
-  const [skillTargets, setSkillTargets] = useState<SkillTargetsResponse | null>(null)
-  const [startupSettings, setStartupSettings] = useState<StartupSettings | null>(null)
-  const [cliPathSettings, setCliPathSettings] = useState<CliPathSettings | null>(null)
-  const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null)
-  const [ollamaModels, setOllamaModels] = useState<OllamaModelsResponse | null>(null)
   const [mode, setMode] = useState<SourceMode>('local')
   const [localForm, setLocalForm] = useState<LocalForm>(initialLocalForm)
   const [webForm, setWebForm] = useState<WebForm>(() => ({
@@ -160,12 +140,6 @@ function App() {
   const [isPickingFiles, setIsPickingFiles] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [message, setMessage] = useState<AppMessage | null>(null)
-  const [isSavingSettings, setIsSavingSettings] = useState(false)
-  const [isSyncingSkills, setIsSyncingSkills] = useState(false)
-  const [isSavingStartup, setIsSavingStartup] = useState(false)
-  const [isAddingCliPath, setIsAddingCliPath] = useState(false)
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
-  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false)
 
   const activeView = useMemo((): ViewName => {
     if (location.pathname.startsWith('/sources')) return 'sources'
@@ -193,6 +167,32 @@ function App() {
   const showMessage = useCallback((view: ViewName, nextMessage: Exclude<Message, null>) => {
     setMessage({ ...nextMessage, view })
   }, [])
+
+  const settingsController = useSettingsController({ showMessage })
+  const {
+    addCliToPath,
+    checkForUpdates,
+    cliPathSettings,
+    copyCliPath,
+    installUpdate,
+    isAddingCliPath,
+    isCheckingUpdate,
+    isInstallingUpdate,
+    isSavingSettings,
+    isSavingStartup,
+    isSyncingSkills,
+    ollamaModels,
+    refreshCliPathSettings,
+    refreshSettings: refreshSettingsBundle,
+    refreshStartupSettings,
+    saveSettings,
+    setStartupEnabled,
+    settings,
+    skillTargets,
+    startupSettings,
+    syncSkills,
+    updateStatus,
+  } = settingsController
 
   const sourcesController = useSourcesController({ settings, showMessage })
   const {
@@ -234,39 +234,14 @@ function App() {
   const sourcesMessage = message?.view === 'sources' ? message : null
   const settingsMessage = message?.view === 'settings' ? message : null
 
-  const refreshSettings = useCallback(async () => {
-    const { health: healthPayload, settings: settingsPayload, ollamaModels: modelsPayload, skillTargets: skillsPayload } =
-      await loadSettingsBundle()
-    setHealth(healthPayload)
-    setSettings(settingsPayload)
-    applyInitialSearchMode(settingsPayload.default_search_mode)
-    setOllamaModels(modelsPayload)
-    setSkillTargets(skillsPayload)
-    setApiStatus('online')
-  }, [applyInitialSearchMode])
-
-  const refreshStartupSettings = useCallback(async () => {
-    if (!window.ingestorDesktop) {
-      setStartupSettings({ supported: false, openAtLogin: false })
-      return
-    }
-    setStartupSettings(await window.ingestorDesktop.getStartupSettings())
-  }, [])
-
-  const refreshCliPathSettings = useCallback(async () => {
-    if (!window.ingestorDesktop) {
-      setCliPathSettings({ supported: false, path: '', inPath: false })
-      return
-    }
-    setCliPathSettings(await window.ingestorDesktop.getCliPathSettings())
-  }, [])
-
   const loadAppData = useCallback(async () => {
-    await refreshSettings()
+    const settingsPayload = await refreshSettingsBundle()
+    applyInitialSearchMode(settingsPayload.default_search_mode)
+    setApiStatus('online')
     await refreshStartupSettings()
     await refreshCliPathSettings()
     await refreshSources()
-  }, [refreshCliPathSettings, refreshSettings, refreshSources, refreshStartupSettings])
+  }, [applyInitialSearchMode, refreshCliPathSettings, refreshSettingsBundle, refreshSources, refreshStartupSettings])
 
   useEffect(() => {
     let isActive = true
@@ -466,148 +441,10 @@ function App() {
     }))
   }
 
-  async function saveSettings(request: SettingsSaveRequest) {
-    setIsSavingSettings(true)
-    setMessage(null)
-    try {
-      let nextSettings: SettingsResponse | null = null
-
-      if (request.resetToDefaults) {
-        nextSettings = await resetSettings()
-      }
-
-      if (request.model) {
-        nextSettings = await updateEmbeddingSettings(request.model)
-      }
-
-      if (request.indexing) {
-        nextSettings = await updateEmbeddingIndexingSettings({
-          strategy: request.indexing.strategy,
-          batch_size: request.indexing.batchSize,
-        })
-      }
-
-      if (request.retrievalMode) {
-        nextSettings = await updateRetrievalSettings(request.retrievalMode)
-      }
-
-      if (nextSettings) {
-        setSettings(nextSettings)
-        applySavedSearchMode(nextSettings.default_search_mode)
-      }
-      showMessage('settings', { text: 'Settings saved', tone: 'success' })
-    } catch (error) {
-      showMessage('settings', {
-        text: error instanceof Error ? error.message : 'Unable to save settings',
-        tone: 'error',
-      })
-    } finally {
-      setIsSavingSettings(false)
-    }
-  }
-
-  async function syncSkills(targetIds?: string[]) {
-    setIsSyncingSkills(true)
-    setMessage(null)
-    try {
-      setSkillTargets(await syncSkillsRequest(targetIds))
-      showMessage('settings', { text: 'Agent skills updated', tone: 'success' })
-    } catch (error) {
-      showMessage('settings', {
-        text: error instanceof Error ? error.message : 'Unable to update agent skills',
-        tone: 'error',
-      })
-    } finally {
-      setIsSyncingSkills(false)
-    }
-  }
-
-  async function setStartupEnabled(enabled: boolean) {
-    if (!window.ingestorDesktop) return
-    setIsSavingStartup(true)
-    setMessage(null)
-    try {
-      setStartupSettings(await window.ingestorDesktop.setStartupEnabled(enabled))
-      showMessage('settings', {
-        text: enabled ? 'Ingestor will start with Windows' : 'Startup disabled',
-        tone: 'success',
-      })
-    } catch (error) {
-      showMessage('settings', {
-        text: error instanceof Error ? error.message : 'Unable to update startup setting',
-        tone: 'error',
-      })
-    } finally {
-      setIsSavingStartup(false)
-    }
-  }
-
-  async function addCliToPath() {
-    if (!window.ingestorDesktop) return
-    setIsAddingCliPath(true)
-    setMessage(null)
-    try {
-      const nextSettings = await window.ingestorDesktop.addCliToPath()
-      setCliPathSettings(nextSettings)
-      showMessage('settings', {
-        text: nextSettings.inPath ? 'Ingestor CLI folder added to PATH' : 'Unable to confirm PATH update',
-        tone: nextSettings.inPath ? 'success' : 'error',
-      })
-    } catch (error) {
-      showMessage('settings', {
-        text: error instanceof Error ? error.message : 'Unable to add CLI folder to PATH',
-        tone: 'error',
-      })
-    } finally {
-      setIsAddingCliPath(false)
-    }
-  }
-
-  async function copyCliPath() {
-    const path = cliPathSettings?.path
-    if (!path) return
-
-    try {
-      await navigator.clipboard.writeText(path)
-      showMessage('settings', { text: 'CLI folder path copied', tone: 'success' })
-    } catch {
-      showMessage('settings', { text: 'Select the CLI folder path and copy it manually', tone: 'error' })
-    }
-  }
-
-  async function checkForUpdates() {
-    if (!window.ingestorDesktop) return
-    setIsCheckingUpdate(true)
-    setMessage(null)
-    try {
-      const nextStatus = await window.ingestorDesktop.checkForUpdate()
-      setUpdateStatus(nextStatus)
-      showMessage('settings', {
-        text: nextStatus.available ? `Ingestor ${nextStatus.version} is available` : 'Ingestor is up to date',
-        tone: 'success',
-      })
-    } catch (error) {
-      showMessage('settings', {
-        text: error instanceof Error ? error.message : 'Unable to check for updates',
-        tone: 'error',
-      })
-    } finally {
-      setIsCheckingUpdate(false)
-    }
-  }
-
-  async function installUpdate() {
-    if (!window.ingestorDesktop || !updateStatus?.available) return
-    setIsInstallingUpdate(true)
-    setMessage(null)
-    try {
-      await window.ingestorDesktop.installUpdate()
-    } catch (error) {
-      showMessage('settings', {
-        text: error instanceof Error ? error.message : 'Unable to install update',
-        tone: 'error',
-      })
-      setIsInstallingUpdate(false)
+  async function handleSaveSettings(...args: Parameters<typeof saveSettings>) {
+    const nextSettings = await saveSettings(...args)
+    if (nextSettings) {
+      applySavedSearchMode(nextSettings.default_search_mode)
     }
   }
 
@@ -699,7 +536,7 @@ function App() {
                 isAddingCliPath={isAddingCliPath}
                 isCheckingUpdate={isCheckingUpdate}
                 isInstallingUpdate={isInstallingUpdate}
-                onSaveSettings={saveSettings}
+                onSaveSettings={handleSaveSettings}
                 onSyncSkills={syncSkills}
                 onSetStartupEnabled={setStartupEnabled}
                 onAddCliToPath={addCliToPath}

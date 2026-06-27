@@ -26,7 +26,7 @@
 | Fixed | CSP tightening | `tauri.conf.json` now restricts default loading, Tauri IPC, local backend access, image sources, and local styles instead of disabling CSP entirely. |
 | Fixed | Backend unavailable state | When the local API cannot be reached, the frontend shows a focused offline panel with the backend URL, desktop/dev startup guidance, and a retry action. Verified in the running browser UI. |
 | Fixed | Settings dropdown labels | Dropdown options now expose concise accessible names while keeping longer descriptions as secondary visible text/tooltips. Verified in the running browser UI. |
-| Partially fixed | Frontend controller split | Frontend API calls live in `frontend/src/api.ts`, and source/job/search orchestration now lives in `frontend/src/hooks/useSourcesController.ts`. `App.tsx` still owns capture form and settings/desktop orchestration. |
+| Partially fixed | Frontend controller split | Frontend API calls live in `frontend/src/api.ts`; source/job/search orchestration lives in `frontend/src/hooks/useSourcesController.ts`; settings, skills, startup, PATH, and updater orchestration live in `frontend/src/hooks/useSettingsController.ts`. `App.tsx` still owns capture form state and route composition. |
 | Fixed | Local source request contract | Backend local-source registration now accepts `paths` only and rejects the legacy singular `path` field. Covered by tests. |
 | Fixed | Evaluation runtime cleanup | Removed the two evaluation sources, their jobs, and their local snapshot folders from the repo-local backend data. Verified by live API and filesystem checks. |
 | Fixed | Capture search entry point | Capture now surfaces indexed/searchable sources and can jump directly into the Sources search view with a selected source. Verified in the running browser UI. |
@@ -45,7 +45,7 @@ Verification for the latest remediation pass:
 - Live API/filesystem check: `test-src-tauri` and `eval-test-frontend-src-tauri` sources are absent, job count is `0`, and their `backend/data/local` snapshot folders no longer exist.
 - Live API check: singular `path` local-source registration payload now returns `422`; `paths` is the supported request field.
 - Live browser check: Capture shows an empty indexed-source search entry when no sources are ready, then shows a temporary indexed source and navigates to `#/sources` with the search form after selecting it. The temporary source was deleted after verification.
-- Frontend architecture check: `useSourcesController` now owns source loading, active-job polling, selection, re-index, cancel, delete, and search state. `npm --prefix frontend run lint`, `npm --prefix frontend run build`, and a live browser smoke check across Capture/Sources/Settings pass.
+- Frontend architecture check: `useSourcesController` owns source loading, active-job polling, selection, re-index, cancel, delete, and search state. `useSettingsController` owns settings bundle loading, saves, skill sync, startup, PATH, and updater state. `npm --prefix frontend run lint`, `npm --prefix frontend run build`, and a live browser smoke check across Capture/Sources/Settings pass.
 
 ---
 
@@ -94,7 +94,7 @@ Verification for the latest remediation pass:
 
 ## 5. Code / Architecture Observations
 
-- **Partially fixed.** Frontend state management is concentrated in `App.tsx`. API wrappers now live in `frontend/src/api.ts`, and source/job/search orchestration now lives in `frontend/src/hooks/useSourcesController.ts`. `App.tsx` still owns capture form state plus settings and desktop-control orchestration, which can be split later if it continues to grow.
+- **Partially fixed.** Frontend state management is concentrated in `App.tsx`. API wrappers now live in `frontend/src/api.ts`; source/job/search orchestration now lives in `frontend/src/hooks/useSourcesController.ts`; settings, skills, startup, PATH, and updater orchestration now live in `frontend/src/hooks/useSettingsController.ts`. `App.tsx` still owns capture form state and route composition.
 - **Partially fixed.** TypeScript `API_BASE_URL` fallback chain is correct (`window.ingestorDesktop?.backendUrl ?? import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8765'`). The hard-coded local default remains intentional, but unreachable backend states are now surfaced explicitly in the UI.
 - **Fixed.** CSP is set to `null` in `tauri.conf.json`. This disables Content-Security Policy in the built app. It should be tightened before shipping, at minimum to `default-src 'self'; connect-src 'self' http://127.0.0.1:8765`.
 - **Fixed.** Backend `LocalSourceRequest` supports both `paths` and a legacy `path` field. The model now accepts `paths` only and forbids extra fields, so singular `path` submissions fail validation instead of being treated as a compatibility path.
@@ -119,7 +119,7 @@ Verification for the latest remediation pass:
 ### Low
 9. ~~Add `GET /api/sources/jobs` for consistency or remove references to it.~~ Fixed.
 10. ~~Tighten the Tauri CSP before release.~~ Fixed.
-11. Partially fixed: API calls moved from `App.tsx` into `frontend/src/api.ts`, and source/job/search state moved into `frontend/src/hooks/useSourcesController.ts`. Remaining capture-form and settings/desktop extraction can be handled in a later pass.
+11. Partially fixed: API calls moved from `App.tsx` into `frontend/src/api.ts`; source/job/search state moved into `frontend/src/hooks/useSourcesController.ts`; settings/desktop state moved into `frontend/src/hooks/useSettingsController.ts`. Remaining capture-form extraction can be handled in a later pass.
 12. Consider deduplicating local snapshots across sources.
 
 ---
