@@ -241,6 +241,10 @@ function App() {
   }, [jobs, selectedSource])
 
   const recentSources = sortedSources.slice(0, 5)
+  const searchableSources = useMemo(
+    () => sortedSources.filter((source) => isSourceQueryable(source, settings)),
+    [settings, sortedSources],
+  )
 
   const refreshSources = useCallback(async () => {
     const payload = await loadSources()
@@ -350,6 +354,12 @@ function App() {
     } else {
       setActiveLogs('')
     }
+  }
+
+  function searchFromCapture(sourceId?: string) {
+    if (sourceId) selectSource(sourceId)
+    setSearchOutput(null)
+    navigate('/sources')
   }
 
   async function registerLocalSource(event: FormEvent<HTMLFormElement>) {
@@ -779,6 +789,7 @@ function App() {
                 mode={mode}
                 message={captureMessage}
                 recentSources={recentSources}
+                searchableSources={searchableSources}
                 localForm={localForm}
                 webForm={webForm}
                 isPickingFiles={isPickingFiles}
@@ -795,6 +806,7 @@ function App() {
                 onResetWebOptions={resetWebOptions}
                 onNavigate={(view) => navigate(`/${view}`)}
                 onSelectSource={selectSource}
+                onSearchSource={searchFromCapture}
                 onCancelJob={(job) => cancelJob(job, 'capture')}
               />
             }

@@ -29,6 +29,7 @@
 | Partially fixed | Frontend service split | Frontend API calls moved out of `App.tsx` into `frontend/src/api.ts`; `App.tsx` still owns page state and can be split further later. |
 | Fixed | Local source request contract | Backend local-source registration now accepts `paths` only and rejects the legacy singular `path` field. Covered by tests. |
 | Fixed | Evaluation runtime cleanup | Removed the two evaluation sources, their jobs, and their local snapshot folders from the repo-local backend data. Verified by live API and filesystem checks. |
+| Fixed | Capture search entry point | Capture now surfaces indexed/searchable sources and can jump directly into the Sources search view with a selected source. Verified in the running browser UI. |
 
 Verification for the latest remediation pass:
 
@@ -43,6 +44,7 @@ Verification for the latest remediation pass:
 - Live browser check: backend-offline panel rendered after stopping the daemon, Retry recovered after restarting the daemon, and Settings dropdown options exposed short accessible labels.
 - Live API/filesystem check: `test-src-tauri` and `eval-test-frontend-src-tauri` sources are absent, job count is `0`, and their `backend/data/local` snapshot folders no longer exist.
 - Live API check: singular `path` local-source registration payload now returns `422`; `paths` is the supported request field.
+- Live browser check: Capture shows an empty indexed-source search entry when no sources are ready, then shows a temporary indexed source and navigates to `#/sources` with the search form after selecting it. The temporary source was deleted after verification.
 
 ---
 
@@ -76,7 +78,7 @@ Verification for the latest remediation pass:
 - **Partially fixed.** `frontend/src/desktop.ts` and `frontend/src-tauri/src/lib.rs` default to `http://127.0.0.1:8765`. The Tauri shell already auto-starts the bundled daemon in desktop builds. Browser/dev sessions now show a clear backend-unavailable state with the backend URL, startup guidance, and Retry instead of failing silently.
 - **Fixed.** Local file picker does not warn about huge artifact directories. Selecting `frontend/src-tauri` copied the entire `target/` directory (debug and release build outputs) into the local source snapshot. The resulting index grew to more than 1,500 documents and 2,000 chunks, most of which were `.json` fingerprint/build files rather than documentation.
 - **Fixed.** Default exclude/ignore patterns are insufficient. The snapshot ignore list ignores `node_modules`, `dist`, and `build`, but not `target/**`, `.git/**`, `.venv/**`, or IDE metadata. This causes unnecessary disk use and long index times.
-- **No search-as-you-type or search from the Capture page.** Users must switch to Sources and select a source before searching.
+- **Fixed.** No search-as-you-type or search from the Capture page. Capture now lists searchable indexed sources and can navigate directly to Sources search with the selected source.
 
 ---
 

@@ -1,4 +1,5 @@
 .captureCard,
+.searchPanel,
 .progressPanel {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -292,6 +293,11 @@
   margin-top: var(--space-3);
 }
 
+.searchPanel {
+  display: grid;
+  gap: var(--space-5);
+}
+
 .sectionHeading {
   align-items: center;
   display: flex;
@@ -308,6 +314,12 @@
   text-transform: uppercase;
 }
 
+.sectionHeading p {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-1);
+}
+
 .linkButton {
   background: transparent;
   border: 0;
@@ -315,6 +327,60 @@
   cursor: pointer;
   font-weight: 500;
   padding: var(--space-2) var(--space-4);
+}
+
+.linkButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.searchSourceList {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.searchSourceItem {
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-4);
+  justify-content: space-between;
+  min-height: 76px;
+  min-width: 0;
+  padding: var(--space-4) var(--space-5);
+  text-align: left;
+}
+
+.searchSourceItem:hover {
+  border-color: var(--muted);
+}
+
+.searchSourceItem span {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.searchSourceItem strong,
+.searchSourceItem small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchSourceItem strong {
+  font-size: var(--font-size-md);
+  font-weight: 650;
+}
+
+.searchSourceItem small {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
 }
 
 .sourceList {
@@ -539,6 +605,7 @@
   .advancedIntro,
   .optionGrid,
   .patternGrid,
+  .searchSourceList,
   .sourceItem,
   .stageList {
     grid-template-columns: 1fr;

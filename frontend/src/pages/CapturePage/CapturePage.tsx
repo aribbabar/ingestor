@@ -22,6 +22,7 @@ type CapturePageProps = {
   mode: SourceMode;
   message: Message;
   recentSources: SourceRecord[];
+  searchableSources: SourceRecord[];
   localForm: LocalForm;
   webForm: WebForm;
   isPickingFiles: boolean;
@@ -38,6 +39,7 @@ type CapturePageProps = {
   onResetWebOptions: () => void;
   onNavigate: (view: ViewName) => void;
   onSelectSource: (sourceId: string) => void;
+  onSearchSource: (sourceId?: string) => void;
   onCancelJob: (job: IndexJob) => void;
 };
 
@@ -70,6 +72,7 @@ export function CapturePage({
   mode,
   message,
   recentSources,
+  searchableSources,
   localForm,
   webForm,
   isPickingFiles,
@@ -86,6 +89,7 @@ export function CapturePage({
   onResetWebOptions,
   onNavigate,
   onSelectSource,
+  onSearchSource,
   onCancelJob
 }: CapturePageProps) {
   const isLocal = mode === "local";
@@ -424,6 +428,43 @@ export function CapturePage({
           <div className={styles.emptyState}>
             No indexing job has started yet.
           </div>
+        )}
+      </section>
+
+      <section className={styles.searchPanel} aria-labelledby="capture-search-title">
+        <div className={styles.sectionHeading}>
+          <div>
+            <h2 id="capture-search-title">Search indexed sources</h2>
+            <p>{searchableSources.length ? `${searchableSources.length} source${searchableSources.length === 1 ? "" : "s"} ready` : "No indexed sources ready"}</p>
+          </div>
+          <button
+            className={styles.linkButton}
+            disabled={!searchableSources.length}
+            onClick={() => onSearchSource()}
+            type="button"
+          >
+            Open search
+          </button>
+        </div>
+        {searchableSources.length ? (
+          <div className={styles.searchSourceList}>
+            {searchableSources.slice(0, 3).map((source) => (
+              <button
+                className={styles.searchSourceItem}
+                key={source.id}
+                onClick={() => onSearchSource(source.id)}
+                type="button"
+              >
+                <span>
+                  <strong>{source.name}</strong>
+                  <small>{source.document_count} docs, {source.chunk_count} chunks</small>
+                </span>
+                <Badge value={source.kind} variant={source.kind} />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.emptyState}>Indexed sources appear here when they are ready to search.</div>
         )}
       </section>
 
