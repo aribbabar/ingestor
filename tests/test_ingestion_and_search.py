@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tempfile
 import sqlite3
@@ -422,6 +423,39 @@ class VectorIndexTests(TestCase):
                 test_db.engine.dispose()
 
         self.assertEqual(len(snapshots), 1)
+
+    def test_reindex_recreates_missing_local_snapshot_before_clearing_documents(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            root = Path(directory)
+            docs = root / "docs"
+            docs.mkdir()
+            (docs / "guide.md").write_text("# Guide\n\nUse Ingestor for local docs.", encoding="utf-8")
+            snapshot_root = root / "local"
+            test_db = Database(root / "ingestor.sqlite")
+            original_db = source_service.db
+            original_get_settings = source_service.get_settings
+
+            class Settings:
+                local_source_dir = snapshot_root
+
+            try:
+                source_service.db = test_db
+                source_service.get_settings = lambda: Settings()
+                source = source_service.register_local_source(source_service.LocalSourceRequest(paths=[docs], name="docs"))
+                indexed = source_service.index_source(source.id)
+                old_snapshot_dir = Path(str(indexed.metadata["snapshot_dir"]))
+                shutil.rmtree(old_snapshot_dir)
+
+                reindexed = source_service.index_source(source.id)
+
+                self.assertEqual(reindexed.status, SourceStatus.INDEXED)
+                self.assertEqual(reindexed.document_count, 1)
+                self.assertGreater(reindexed.chunk_count, 0)
+                self.assertTrue(Path(str(reindexed.metadata["snapshot_dir"])).exists())
+            finally:
+                source_service.db = original_db
+                source_service.get_settings = original_get_settings
+                test_db.engine.dispose()
 
     def test_running_job_can_be_found_for_source(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:

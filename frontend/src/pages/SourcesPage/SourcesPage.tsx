@@ -113,7 +113,12 @@ export function SourcesPage({
                   )}
                   key={source.id}
                 >
-                  <button className={styles.sourceSelect} onClick={() => onSelectSource(source.id)} type="button">
+                  <button
+                    aria-label={`Select ${source.name}`}
+                    className={styles.sourceSelect}
+                    onClick={() => onSelectSource(source.id)}
+                    type="button"
+                  >
                     <span className={styles.sourceIdentity}>
                       <strong>{source.name}</strong>
                       <span title={source.location}>{source.location}</span>
@@ -222,7 +227,8 @@ export function SourcesPage({
               id="limit"
               max="50"
               min="1"
-              onChange={(event) => onSearchLimitChange(Number(event.target.value))}
+              onChange={(event) => onSearchLimitChange(clampSearchLimit(Number(event.target.value)))}
+              onFocus={(event) => event.currentTarget.select()}
               required
               type="number"
               value={searchLimit}
@@ -396,4 +402,9 @@ function numberValue(value: unknown) {
 
 function formatSourceCount(count: number) {
   return `${count} ${count === 1 ? 'source' : 'sources'}`
+}
+
+function clampSearchLimit(value: number) {
+  if (!Number.isFinite(value)) return 8
+  return Math.min(50, Math.max(1, Math.trunc(value)))
 }

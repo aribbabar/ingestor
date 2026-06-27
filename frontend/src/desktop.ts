@@ -65,11 +65,17 @@ function installDesktopBridge() {
       await relaunch()
     },
     onBackendStatus: (callback) => {
+      let cancelled = false
       let unlisten: (() => void) | null = null
       void listen<BackendStatus>('backend-status', (event) => callback(event.payload)).then((handler) => {
+        if (cancelled) {
+          handler()
+          return
+        }
         unlisten = handler
       })
       return () => {
+        cancelled = true
         unlisten?.()
       }
     },

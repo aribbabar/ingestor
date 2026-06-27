@@ -87,7 +87,7 @@ def path_key(path: Path) -> str:
 
 def snapshot_local_paths(source: SourceRecord, paths: list[Path]) -> dict:
     settings = get_settings()
-    snapshot_dir = settings.local_source_dir / f"{internal_version()}-{source.id[:8]}-{safe_path_name(source.name)}"
+    snapshot_dir = unique_snapshot_dir(settings.local_source_dir, f"{internal_version()}-{source.id[:8]}-{safe_path_name(source.name)}")
     snapshot_dir.mkdir(parents=True, exist_ok=False)
 
     snapshot_paths: list[Path] = []
@@ -117,6 +117,15 @@ def snapshot_local_paths(source: SourceRecord, paths: list[Path]) -> dict:
     }
 
 
+def unique_snapshot_dir(root: Path, name: str) -> Path:
+    candidate = root / name
+    index = 2
+    while candidate.exists():
+        candidate = root / f"{name}-{index}"
+        index += 1
+    return candidate
+
+
 def ignore_snapshot_entries(directory: str, names: list[str]) -> set[str]:
     return {name for name in names if name in SNAPSHOT_SKIP_DIRS}
 
@@ -139,22 +148,67 @@ def safe_path_name(value: str) -> str:
 
 
 def local_source_paths(source: SourceRecord) -> tuple[list[Path], list[Path] | None]:
-    snapshot_paths = [Path(path) for path in source.metadata.get("snapshot_paths", [])]
-    original_paths = [Path(path) for path in source.metadata.get("original_paths", [])]
-    if snapshot_paths:
+    snapshot_paths = metadata_path_list(source, "snapshot_paths")
+    original_paths = local_source_original_paths(source)
+    if snapshot_paths and all(path.exists() for path in snapshot_paths):
         return snapshot_paths, original_paths if len(original_paths) == len(snapshot_paths) else None
 
-    legacy_paths = [Path(path) for path in source.metadata.get("paths", [])]
-    return legacy_paths, None
+    if snapshot_paths and original_paths:
+        return refresh_local_snapshot(source, original_paths), original_paths
+
+    legacy_paths = metadata_path_list(source, "paths")
+    if legacy_paths and all(path.exists() for path in legacy_paths):
+        return legacy_paths, None
+
+    if original_paths:
+        return refresh_local_snapshot(source, original_paths), original_paths
+
+    raise FileNotFoundError(f"No local paths are available to re-index {source.name}. Re-add the source from its original files.")
+
+
+def metadata_path_list(source: SourceRecord, key: str) -> list[Path]:
+    paths = source.metadata.get(key, [])
+    if not isinstance(paths, list):
+        return []
+    return [Path(str(path)).expanduser().resolve() for path in paths if str(path).strip()]
+
+
+def refresh_local_snapshot(source: SourceRecord, original_paths: list[Path]) -> list[Path]:
+    missing = [path for path in original_paths if not path.exists()]
+    if missing:
+        missing_text = "; ".join(str(path) for path in missing)
+        raise FileNotFoundError(
+            f"Local snapshot for {source.name} is unavailable and original path(s) are missing: {missing_text}. "
+            "Re-add the source from an existing folder or file."
+        )
+
+    previous_snapshot_dir = source.metadata.get("snapshot_dir")
+    snapshot = snapshot_local_paths(source, original_paths)
+    source.metadata = {
+        **source.metadata,
+        "original_paths": [str(path) for path in original_paths],
+        "snapshot_dir": str(snapshot["snapshot_dir"]),
+        "snapshot_paths": [str(path) for path in snapshot["snapshot_paths"]],
+        "path_mappings": snapshot["path_mappings"],
+        "paths": [str(path) for path in snapshot["snapshot_paths"]],
+    }
+    db.upsert_source(source)
+    remove_local_snapshot_dir(previous_snapshot_dir, skip=snapshot["snapshot_dir"])
+    return list(snapshot["snapshot_paths"])
 
 
 def remove_local_snapshot(source: SourceRecord) -> None:
-    snapshot_dir = source.metadata.get("snapshot_dir")
+    remove_local_snapshot_dir(source.metadata.get("snapshot_dir"))
+
+
+def remove_local_snapshot_dir(snapshot_dir: object, *, skip: Path | None = None) -> None:
     if not snapshot_dir:
         return
     settings = get_settings()
     root = settings.local_source_dir.resolve()
     target = Path(str(snapshot_dir)).expanduser().resolve()
+    if skip and target == skip.expanduser().resolve():
+        return
     if target == root or root not in target.parents:
         return
     shutil.rmtree(target, ignore_errors=True)
