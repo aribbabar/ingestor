@@ -24,13 +24,19 @@ export async function loadSources() {
 }
 
 export async function loadSettingsBundle() {
-  const [health, settings, ollamaModels, skillTargets] = await Promise.all([
+  const [health, settings] = await Promise.all([
     requestJson<HealthResponse>('/api/health'),
     requestJson<SettingsResponse>('/api/settings'),
-    requestJson<OllamaModelsResponse>('/api/ollama/models'),
-    requestJson<SkillTargetsResponse>('/api/skills/targets'),
   ])
-  return { health, settings, ollamaModels, skillTargets }
+  return { health, settings }
+}
+
+export async function loadOllamaModels(options: { timeoutMs?: number } = {}) {
+  return requestJson<OllamaModelsResponse>('/api/ollama/models', { timeoutMs: options.timeoutMs })
+}
+
+export async function loadSkillTargets(options: { timeoutMs?: number } = {}) {
+  return requestJson<SkillTargetsResponse>('/api/skills/targets', { timeoutMs: options.timeoutMs })
 }
 
 export async function loadJob(jobId: string) {
@@ -126,14 +132,29 @@ export async function syncSkills(targetIds?: string[]) {
   })
 }
 
-async function requestJson<T>(path: string, options: { method?: string; body?: unknown } = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: options.method ?? 'GET',
-    headers: options.body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  })
-  if (!response.ok) throw new Error(await readErrorMessage(response))
-  return (await response.json()) as T
+async function requestJson<T>(path: string, options: { method?: string; body?: unknown; timeoutMs?: number } = {}) {
+  const controller = options.timeoutMs ? new AbortController() : null
+  const timeout = controller
+    ? window.setTimeout(() => controller.abort(), options.timeoutMs)
+    : null
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: options.method ?? 'GET',
+      headers: options.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: controller?.signal,
+    })
+    if (!response.ok) throw new Error(await readErrorMessage(response))
+    return (await response.json()) as T
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Request timed out')
+    }
+    throw error
+  } finally {
+    if (timeout !== null) window.clearTimeout(timeout)
+  }
 }
 
 async function readErrorMessage(response: Response) {

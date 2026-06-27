@@ -172,7 +172,6 @@ export function CapturePage({
                 onChange={(event) =>
                   onLocalFormChange({ ...localForm, name: event.target.value })
                 }
-                required
                 type="text"
                 value={localForm.name}
               />
@@ -203,7 +202,6 @@ export function CapturePage({
                   onWebFormChange({ ...webForm, url: event.target.value })
                 }
                 placeholder="https://react.dev/reference/react"
-                required
                 type="url"
                 value={webForm.url}
               />
@@ -216,7 +214,6 @@ export function CapturePage({
                   onWebFormChange({ ...webForm, name: event.target.value })
                 }
                 placeholder="react"
-                required
                 type="text"
                 value={webForm.name}
               />
@@ -250,7 +247,6 @@ export function CapturePage({
                         maxPages: Number(event.target.value)
                       })
                     }
-                    required
                     type="number"
                     value={webForm.maxPages}
                   />
@@ -267,7 +263,6 @@ export function CapturePage({
                         maxDepth: Number(event.target.value)
                       })
                     }
-                    required
                     type="number"
                     value={webForm.maxDepth}
                   />

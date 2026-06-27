@@ -31,6 +31,21 @@ Verification completed:
 - `npm --prefix frontend run build` — passed.
 - Browser smoke checks against `http://127.0.0.1:5173/#/sources` and `#/settings` confirmed route rendering, select labels such as `Mode: Full text`, active-descendant wiring, and Save button exposure with `aria-disabled="true"`.
 
+## Fix Pass — 2026-06-27, follow-up
+
+Addressed the next small batch of recommended fixes:
+
+- Fixed PERF-3 by making only `/api/health` and `/api/settings` required for settings startup. Ollama models and skill targets now load as optional follow-up calls with timeout-backed fallback state.
+- Fixed UX-4 by adding document and chunk counts to the delete confirmation description.
+- Fixed CODE-3 by moving the large web exclude defaults string out of `App.tsx` and into `frontend/src/constants/webDefaults.ts`.
+- Fixed UX-1 by removing native `required` attributes from Capture forms that have app-level validation and adding explicit custom validation for web URL, source name, max pages, and max depth.
+
+Verification completed:
+
+- `npm --prefix frontend run lint` — passed.
+- `npm --prefix frontend run build` — passed.
+- Browser smoke checks confirmed Settings still renders with healthy optional endpoint data, Capture submit shows the app validation message with no native `required` attributes, and the delete dialog text includes `277 docs and 5277 chunks` for the tested source.
+
 ---
 
 ## Bugs and Defects
@@ -72,6 +87,8 @@ Verification completed:
 
 ### UX-1 — Native required validation fires before custom validation messages (Low)
 
+**Status**: Fixed in the 2026-06-27 follow-up fix pass.
+
 - **Where**: Capture page, local form
 - **Issue**: When submitting the local form with an empty name field, the browser's native `required` validation fires (blocking submission) before the custom JavaScript validation can show the "Enter a unique source name" message. When the name is filled but no paths are selected, the custom "Select at least one local folder or file" message appears correctly. The two validation layers work but the native validation provides a less polished experience (browser-default tooltip vs. the app's inline message).
 
@@ -88,6 +105,8 @@ Verification completed:
 - **Issue**: When search returns 8 results, the results list grows long and pushes the search form above the fold. There's no sticky positioning on the search form or a scroll container for results, so the user has to scroll back up to refine their query. In the Tauri desktop app (820px viewport), only 1 of 8 results is visible without scrolling.
 
 ### UX-4 — Delete confirmation dialog lacks source impact details (Low)
+
+**Status**: Fixed in the 2026-06-27 follow-up fix pass.
 
 - **Where**: Sources page, delete dialog
 - **Issue**: The `ConfirmDialog` says `This will remove "tauri-docs" and its indexed chunks from Ingestor.` — this is clear, but doesn't mention the document/chunk counts (277 docs, 5277 chunks) that would be lost, which could help users understand the impact.
@@ -127,6 +146,8 @@ If the backend goes offline mid-session, the `onBackendStatus` listener sets `ap
 
 ### PERF-3 — Settings bundle loads 4 API calls in parallel on every app mount (Low)
 
+**Status**: Fixed in the 2026-06-27 follow-up fix pass.
+
 - **Where**: `api.ts`, `loadSettingsBundle()` fetches `/api/health`, `/api/settings`, `/api/ollama/models`, `/api/skills/targets` in parallel via `Promise.all`. This is efficient, but the Ollama models endpoint may be slow if Ollama is unreachable (connection timeout), blocking the entire settings load. If any one of these fails, the entire `Promise.all` rejects, potentially showing the offline state even if only one endpoint is down.
 
 ---
@@ -146,6 +167,8 @@ If the backend goes offline mid-session, the `onBackendStatus` listener sets `ap
 `isSourceQueryable()`, `sourceQueryDisabledMessage()`, `isActiveJob()`, and `isRecord()` are duplicated between `SourcesPage.tsx` and `useSourcesController.ts`. These should be extracted to a shared module (e.g., `utils/sourceHelpers.ts`) to prevent drift.
 
 ### CODE-3 — Massive hardcoded DEFAULT_EXCLUDE_PATTERNS string in App.tsx (Low)
+
+**Status**: Fixed in the 2026-06-27 follow-up fix pass.
 
 `App.tsx:41-110` — A 70-line string constant with exclude patterns is embedded directly in the root component. This should be extracted to a constants file or configuration module.
 
@@ -188,17 +211,17 @@ The `useSourcesController` hook applies the default search mode from settings vi
 
 3. **Done** — Fix disabled Save button visibility in WebView2 AX tree (BUG-1).
 4. **Done** — Extract duplicated utility functions (CODE-2).
-5. **Settings bundle error handling** (PERF-3) — Consider making the Ollama models and skill targets calls non-blocking so a slow Ollama response doesn't prevent the app from loading.
+5. **Done** — Settings bundle error handling (PERF-3).
 6. **Done** — Add focus trap to ConfirmDialog (USA-3).
 
 ### Low
 
 7. **Done** — Remove dead health state (CODE-1).
-8. **Extract DEFAULT_EXCLUDE_PATTERNS** (CODE-3) — Move to a constants file.
+8. **Done** — Extract DEFAULT_EXCLUDE_PATTERNS (CODE-3).
 9. **Done** — Add `aria-activedescendant` to SelectControl (CODE-5).
-10. **Unify form validation** (UX-1) — Consider removing native `required` attributes and handling all validation in JavaScript for consistent messaging.
+10. **Done** — Unify form validation (UX-1).
 11. **Add keyboard navigation shortcuts** (USA-1) — Support Alt+1/2/3 for page switching.
-12. **Add source impact details to delete dialog** (UX-4) — Include document and chunk counts in the confirmation message.
+12. **Done** — Add source impact details to delete dialog (UX-4).
 13. **Add sticky search form or results scroll container** (UX-3) — Keep the search form accessible when viewing long result lists.
 
 ---

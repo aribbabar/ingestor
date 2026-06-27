@@ -410,7 +410,9 @@ export function SettingsPage({
         </div>
 
         <div className={styles.skillTargets}>
-          {skillTargets?.targets.map((target) => (
+          {skillTargets === null ? (
+            <p className={styles.rowNote}>Checking skill folders...</p>
+          ) : skillTargets.targets.length ? skillTargets.targets.map((target) => (
             <div className={styles.skillTarget} key={target.id}>
               <div className={styles.skillTargetHeader}>
                 <div>
@@ -437,8 +439,8 @@ export function SettingsPage({
                 ))}
               </div>
             </div>
-          )) ?? (
-            <p className={styles.rowNote}>Checking skill folders...</p>
+          )) : (
+            <p className={styles.rowNote}>Agent skill targets are unavailable right now.</p>
           )}
         </div>
       </section>

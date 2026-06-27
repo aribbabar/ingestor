@@ -23,6 +23,7 @@ import {
 } from './api'
 import { useSettingsController } from './hooks/useSettingsController'
 import { useSourcesController } from './hooks/useSourcesController'
+import { DEFAULT_EXCLUDE_PATTERNS } from './constants/webDefaults'
 import styles from './App.module.css'
 
 type AppMessage = Exclude<Message, null> & { view: ViewName }
@@ -37,77 +38,6 @@ const initialLocalForm: LocalForm = {
   paths: [],
   name: '',
 }
-
-const DEFAULT_EXCLUDE_PATTERNS = `**/CHANGELOG.md
-**/changelog.md
-**/CHANGELOG.mdx
-**/changelog.mdx
-**/LICENSE
-**/LICENSE.md
-**/license.md
-**/CODE_OF_CONDUCT.md
-**/code_of_conduct.md
-**/*.test.*
-**/*.spec.*
-**/*_test.py
-**/*_test.go
-**/*.lock
-**/package-lock.json
-**/yarn.lock
-**/pnpm-lock.yaml
-**/go.sum
-**/*.min.js
-**/*.min.css
-**/*.map
-**/*.d.ts
-**/.DS_Store
-**/Thumbs.db
-**/*.swp
-**/*.swo
-/.*\\.(ini|cfg|conf|log|pid)$/
-**/archive/**
-**/archived/**
-**/deprecated/**
-**/legacy/**
-**/old/**
-**/outdated/**
-**/previous/**
-**/superseded/**
-docs/old/**
-**/test/**
-**/tests/**
-**/__tests__/**
-**/spec/**
-**/dist/**
-**/build/**
-**/out/**
-**/target/**
-**/.next/**
-**/.nuxt/**
-**/.vscode/**
-**/.idea/**
-**/i18n/ar*/**
-**/i18n/de*/**
-**/i18n/es*/**
-**/i18n/fr*/**
-**/i18n/hi*/**
-**/i18n/it*/**
-**/i18n/ja*/**
-**/i18n/ko*/**
-**/i18n/nl*/**
-**/i18n/pl*/**
-**/i18n/pt*/**
-**/i18n/ru*/**
-**/i18n/sv*/**
-**/i18n/th*/**
-**/i18n/tr*/**
-**/i18n/vi*/**
-**/i18n/zh*/**
-**/zh-cn/**
-**/zh-hk/**
-**/zh-mo/**
-**/zh-sg/**
-**/zh-tw/**`
 
 const defaultWebOptions: Pick<WebForm, 'maxDepth' | 'maxPages' | 'scope' | 'includePatterns' | 'excludePatterns'> = {
   maxDepth: 3,
@@ -335,6 +265,15 @@ function App() {
   async function registerWebSource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const name = webForm.name.trim()
+    const url = webForm.url.trim()
+    if (!url) {
+      showMessage('capture', { text: 'Enter a documentation URL', tone: 'error' })
+      return
+    }
+    if (!isHttpUrl(url)) {
+      showMessage('capture', { text: 'Enter a valid http or https documentation URL', tone: 'error' })
+      return
+    }
     if (!name) {
       showMessage('capture', { text: 'Enter a unique source name', tone: 'error' })
       return
@@ -343,12 +282,20 @@ function App() {
       showMessage('capture', { text: `A source named "${name}" already exists`, tone: 'error' })
       return
     }
+    if (!isIntegerInRange(webForm.maxPages, 1, 1000)) {
+      showMessage('capture', { text: 'Max pages must be a whole number from 1 to 1000', tone: 'error' })
+      return
+    }
+    if (!isIntegerInRange(webForm.maxDepth, 0, 10)) {
+      showMessage('capture', { text: 'Max depth must be a whole number from 0 to 10', tone: 'error' })
+      return
+    }
 
     setIsSubmitting(true)
     setMessage(null)
     try {
       const payload = await registerWebSourceRequest({
-        url: webForm.url,
+        url,
         name,
         max_depth: webForm.maxDepth,
         max_pages: webForm.maxPages,
@@ -558,7 +505,7 @@ function App() {
       {sourcePendingDelete ? (
         <ConfirmDialog
           title="Delete source?"
-          description={`This will remove "${sourcePendingDelete.name}" and its indexed chunks from Ingestor.`}
+          description={sourceDeleteDescription(sourcePendingDelete)}
           confirmLabel="Delete source"
           isConfirming={deletingSourceId === sourcePendingDelete.id}
           onCancel={() => setSourcePendingDelete(null)}
@@ -663,6 +610,25 @@ function sanitizeNumber(value: unknown, fallback: number, min: number, max: numb
 
 function isCrawlScope(value: unknown): value is WebForm['scope'] {
   return value === 'hostname' || value === 'subpages' || value === 'domain'
+}
+
+function isIntegerInRange(value: number, min: number, max: number) {
+  return Number.isInteger(value) && value >= min && value <= max
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function sourceDeleteDescription(source: SourceRecord) {
+  const docs = `${source.document_count} ${source.document_count === 1 ? 'doc' : 'docs'}`
+  const chunks = `${source.chunk_count} ${source.chunk_count === 1 ? 'chunk' : 'chunks'}`
+  return `This will remove "${source.name}" and its indexed content from Ingestor, including ${docs} and ${chunks}.`
 }
 
 function OfflineBackendState({

@@ -1,6 +1,9 @@
 import { useCallback, useState } from 'react'
 import {
+  API_BASE_URL,
+  loadOllamaModels,
   loadSettingsBundle,
+  loadSkillTargets,
   resetSettings,
   syncSkills as syncSkillsRequest,
   updateEmbeddingIndexingSettings,
@@ -21,6 +24,8 @@ import type {
 
 type AppMessage = Exclude<Message, null>
 
+const OPTIONAL_SETTINGS_TIMEOUT_MS = 3500
+
 type UseSettingsControllerOptions = {
   showMessage: (view: ViewName, message: AppMessage) => void
 }
@@ -39,14 +44,36 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false)
 
-  const refreshSettings = useCallback(async () => {
-    const { settings: settingsPayload, ollamaModels: modelsPayload, skillTargets: skillsPayload } =
-      await loadSettingsBundle()
-    setSettings(settingsPayload)
-    setOllamaModels(modelsPayload)
-    setSkillTargets(skillsPayload)
-    return settingsPayload
+  const refreshOllamaModels = useCallback(async () => {
+    try {
+      setOllamaModels(await loadOllamaModels({ timeoutMs: OPTIONAL_SETTINGS_TIMEOUT_MS }))
+    } catch (error) {
+      setOllamaModels({
+        base_url: API_BASE_URL,
+        models: [],
+        selected_model: null,
+        reachable: false,
+        error: error instanceof Error ? error.message : 'Unable to load Ollama models.',
+      })
+    }
   }, [])
+
+  const refreshSkillTargets = useCallback(async () => {
+    try {
+      setSkillTargets(await loadSkillTargets({ timeoutMs: OPTIONAL_SETTINGS_TIMEOUT_MS }))
+    } catch {
+      setSkillTargets({ source_dir: '', skills: [], targets: [] })
+    }
+  }, [])
+
+  const refreshSettings = useCallback(async () => {
+    const { settings: settingsPayload } = await loadSettingsBundle()
+    setSettings(settingsPayload)
+
+    void refreshOllamaModels()
+    void refreshSkillTargets()
+    return settingsPayload
+  }, [refreshOllamaModels, refreshSkillTargets])
 
   const refreshStartupSettings = useCallback(async () => {
     if (!window.ingestorDesktop) {
