@@ -43,6 +43,33 @@
   display: grid;
 }
 
+.resetNotice {
+  align-items: center;
+  background: oklch(98% 0.02 75);
+  border: 1px solid oklch(86% 0.08 75);
+  border-radius: var(--radius-md);
+  color: oklch(42% 0.1 65);
+  display: flex;
+  font-size: var(--font-size-sm);
+  gap: var(--space-5);
+  justify-content: space-between;
+  line-height: var(--line-height-body);
+  margin-top: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+}
+
+.resetNotice button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
 .settingRow {
   align-items: start;
   border-bottom: 1px solid var(--border);
@@ -357,6 +384,11 @@
 
   .panelHeader {
     align-items: stretch;
+    display: grid;
+  }
+
+  .resetNotice {
+    align-items: start;
     display: grid;
   }
 

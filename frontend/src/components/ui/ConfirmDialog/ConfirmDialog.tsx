@@ -6,6 +6,7 @@ type ConfirmDialogProps = {
   title: string
   description: string
   confirmLabel?: string
+  confirmBusyLabel?: string
   cancelLabel?: string
   isConfirming?: boolean
   onCancel: () => void
@@ -16,6 +17,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = 'Confirm',
+  confirmBusyLabel,
   cancelLabel = 'Cancel',
   isConfirming = false,
   onCancel,
@@ -87,7 +89,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </button>
           <button className={styles.confirmButton} disabled={isConfirming} onClick={onConfirm} type="button">
-            {isConfirming ? 'Deleting...' : confirmLabel}
+            {isConfirming ? confirmBusyLabel ?? `${confirmLabel}...` : confirmLabel}
           </button>
         </div>
       </div>

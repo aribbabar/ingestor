@@ -1,0 +1,35 @@
+.errorPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-6);
+  max-width: 720px;
+  padding: var(--panel-padding);
+}
+
+.errorPanel h1 {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  margin: 0 0 var(--space-2);
+}
+
+.errorPanel p {
+  color: var(--muted);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-body);
+  margin: 0;
+}
+
+.errorPanel button {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-md);
+  color: #fff;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  height: var(--control-height-md);
+  justify-self: start;
+  padding: 0 var(--space-6);
+}

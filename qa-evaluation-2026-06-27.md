@@ -17,6 +17,12 @@ Addressed in this pass:
 - **UX-3:** Source selection buttons now expose a short accessible name, `Select {source.name}`, instead of reading the full path and metadata block.
 - **CODE-4:** `onBackendStatus` now cleans up correctly even if the component unmounts before Tauri's async `listen()` call resolves.
 
+Additional fixes from the follow-up pass:
+
+- **BUG-2 / USA-1 / UX-5:** Settings Reset now stays visibly staged, provides a Cancel reset action, and requires confirmation before applying defaults. The confirmation calls out indexed sources that will need reindexing.
+- **UX-1:** The Settings Save button now uses native `disabled` when no save is available.
+- **CODE-5:** Added a route-level React Error Boundary with a Reload recovery action.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -26,8 +32,9 @@ Verification run after the fixes:
 | `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (32 tests) |
 | `npm --prefix frontend run lint` | Pass |
 | `npm --prefix frontend run build` | Pass |
+| Browser verification at `http://127.0.0.1:1420/#/settings` | Pass: Reset banner, confirmation dialog, cancel path, and Settings render verified |
 
-Still open from this report: BUG-2, BUG-3, BUG-6, UX-1, UX-2, UX-4 through UX-9, USA-1 through USA-7, the remaining performance items, and CODE-1, CODE-2, CODE-3, CODE-5, CODE-7, CODE-8, CODE-9, and CODE-10.
+Still open from this report: BUG-3, BUG-6, UX-2, UX-4, UX-6 through UX-9, USA-2 through USA-7, the remaining performance items, and CODE-1, CODE-2, CODE-3, CODE-7, CODE-8, CODE-9, and CODE-10.
 
 ---
 

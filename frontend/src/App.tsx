@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { AppHeader } from './components/layout/AppHeader/AppHeader'
+import { RouteErrorBoundary } from './components/layout/RouteErrorBoundary/RouteErrorBoundary'
 import { ConfirmDialog } from './components/ui/ConfirmDialog/ConfirmDialog'
 import { CapturePage } from './pages/CapturePage/CapturePage'
 import { SettingsPage } from './pages/SettingsPage/SettingsPage'
@@ -398,6 +399,7 @@ function App() {
     if (nextSettings) {
       applySavedSearchMode(nextSettings.default_search_mode)
     }
+    return nextSettings
   }
 
   return (
@@ -407,99 +409,101 @@ function App() {
       {apiStatus === 'offline' ? (
         <OfflineBackendState isDesktopAvailable={Boolean(window.ingestorDesktop)} onRetry={retryApiConnection} />
       ) : (
-        <Routes>
-          <Route index element={<Navigate replace to="/capture" />} />
-          <Route
-            path="/capture"
-            element={
-              <CapturePage
-                activeLogs={activeLogs}
-                latestJob={latestJob}
-                selectedSource={selectedSource}
-                mode={mode}
-                message={captureMessage}
-                recentSources={recentSources}
-                searchableSources={searchableSources}
-                localForm={localForm}
-                webForm={webForm}
-                isPickingFiles={isPickingFiles}
-                isPickingFolder={isPickingFolder}
-                isSubmitting={isSubmitting}
-                onModeChange={setMode}
-                onLocalFormChange={setLocalForm}
-                onWebFormChange={setWebForm}
-                onPickFiles={pickFiles}
-                onPickFolder={pickFolder}
-                onRemoveLocalPath={removeLocalPath}
-                onRegisterLocal={registerLocalSource}
-                onRegisterWeb={registerWebSource}
-                onResetWebOptions={resetWebOptions}
-                onNavigate={(view) => navigate(`/${view}`)}
-                onSelectSource={selectSource}
-                onSearchSource={searchFromCapture}
-                onCancelJob={(job) => cancelJob(job, 'capture')}
-              />
-            }
-          />
-          <Route
-            path="/sources"
-            element={
-              <SourcesPage
-                deletingSourceId={deletingSourceId}
-                isSearching={isSearching}
-                message={sourcesMessage}
-                query={query}
-                searchLimit={searchLimit}
-                searchMode={searchMode}
-                searchOutput={searchOutput}
-                selectedSource={selectedSource}
-                settings={settings}
-                reindexingSourceId={reindexingSourceId}
-                jobs={jobs}
-                sources={sortedSources}
-                totalSourceCount={sources.length}
-                onCancelJob={(job) => cancelJob(job, 'sources')}
-                onQueryChange={setQuery}
-                onRefreshSources={refreshSources}
-                onReindexSource={reindexSource}
-                onRequestDeleteSource={setSourcePendingDelete}
-                onSearchDocs={searchDocs}
-                onSearchLimitChange={setSearchLimit}
-                onSearchModeChange={setSearchMode}
-                onSelectSource={selectSource}
-              />
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <SettingsPage
-                settings={settings}
-                skillTargets={skillTargets}
-                startupSettings={startupSettings}
-                cliPathSettings={cliPathSettings}
-                updateStatus={updateStatus}
-                message={settingsMessage}
-                ollamaModels={ollamaModels}
-                isDesktopAvailable={Boolean(window.ingestorDesktop)}
-                isSavingSettings={isSavingSettings}
-                isSyncingSkills={isSyncingSkills}
-                isSavingStartup={isSavingStartup}
-                isAddingCliPath={isAddingCliPath}
-                isCheckingUpdate={isCheckingUpdate}
-                isInstallingUpdate={isInstallingUpdate}
-                onSaveSettings={handleSaveSettings}
-                onSyncSkills={syncSkills}
-                onSetStartupEnabled={setStartupEnabled}
-                onAddCliToPath={addCliToPath}
-                onCopyCliPath={copyCliPath}
-                onCheckForUpdates={checkForUpdates}
-                onInstallUpdate={installUpdate}
-              />
-            }
-          />
-          <Route path="*" element={<Navigate replace to="/capture" />} />
-        </Routes>
+        <RouteErrorBoundary resetKey={activeView}>
+          <Routes>
+            <Route index element={<Navigate replace to="/capture" />} />
+            <Route
+              path="/capture"
+              element={
+                <CapturePage
+                  activeLogs={activeLogs}
+                  latestJob={latestJob}
+                  selectedSource={selectedSource}
+                  mode={mode}
+                  message={captureMessage}
+                  recentSources={recentSources}
+                  searchableSources={searchableSources}
+                  localForm={localForm}
+                  webForm={webForm}
+                  isPickingFiles={isPickingFiles}
+                  isPickingFolder={isPickingFolder}
+                  isSubmitting={isSubmitting}
+                  onModeChange={setMode}
+                  onLocalFormChange={setLocalForm}
+                  onWebFormChange={setWebForm}
+                  onPickFiles={pickFiles}
+                  onPickFolder={pickFolder}
+                  onRemoveLocalPath={removeLocalPath}
+                  onRegisterLocal={registerLocalSource}
+                  onRegisterWeb={registerWebSource}
+                  onResetWebOptions={resetWebOptions}
+                  onNavigate={(view) => navigate(`/${view}`)}
+                  onSelectSource={selectSource}
+                  onSearchSource={searchFromCapture}
+                  onCancelJob={(job) => cancelJob(job, 'capture')}
+                />
+              }
+            />
+            <Route
+              path="/sources"
+              element={
+                <SourcesPage
+                  deletingSourceId={deletingSourceId}
+                  isSearching={isSearching}
+                  message={sourcesMessage}
+                  query={query}
+                  searchLimit={searchLimit}
+                  searchMode={searchMode}
+                  searchOutput={searchOutput}
+                  selectedSource={selectedSource}
+                  settings={settings}
+                  reindexingSourceId={reindexingSourceId}
+                  jobs={jobs}
+                  sources={sortedSources}
+                  totalSourceCount={sources.length}
+                  onCancelJob={(job) => cancelJob(job, 'sources')}
+                  onQueryChange={setQuery}
+                  onRefreshSources={refreshSources}
+                  onReindexSource={reindexSource}
+                  onRequestDeleteSource={setSourcePendingDelete}
+                  onSearchDocs={searchDocs}
+                  onSearchLimitChange={setSearchLimit}
+                  onSearchModeChange={setSearchMode}
+                  onSelectSource={selectSource}
+                />
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <SettingsPage
+                  settings={settings}
+                  skillTargets={skillTargets}
+                  startupSettings={startupSettings}
+                  cliPathSettings={cliPathSettings}
+                  updateStatus={updateStatus}
+                  message={settingsMessage}
+                  ollamaModels={ollamaModels}
+                  isDesktopAvailable={Boolean(window.ingestorDesktop)}
+                  isSavingSettings={isSavingSettings}
+                  isSyncingSkills={isSyncingSkills}
+                  isSavingStartup={isSavingStartup}
+                  isAddingCliPath={isAddingCliPath}
+                  isCheckingUpdate={isCheckingUpdate}
+                  isInstallingUpdate={isInstallingUpdate}
+                  onSaveSettings={handleSaveSettings}
+                  onSyncSkills={syncSkills}
+                  onSetStartupEnabled={setStartupEnabled}
+                  onAddCliToPath={addCliToPath}
+                  onCopyCliPath={copyCliPath}
+                  onCheckForUpdates={checkForUpdates}
+                  onInstallUpdate={installUpdate}
+                />
+              }
+            />
+            <Route path="*" element={<Navigate replace to="/capture" />} />
+          </Routes>
+        </RouteErrorBoundary>
       )}
 
       {sourcePendingDelete ? (
@@ -507,6 +511,7 @@ function App() {
           title="Delete source?"
           description={sourceDeleteDescription(sourcePendingDelete)}
           confirmLabel="Delete source"
+          confirmBusyLabel="Deleting..."
           isConfirming={deletingSourceId === sourcePendingDelete.id}
           onCancel={() => setSourcePendingDelete(null)}
           onConfirm={() => void deletePendingSource()}

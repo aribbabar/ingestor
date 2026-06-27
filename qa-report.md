@@ -16,6 +16,12 @@ Addressed in this pass:
 - **BUG-4 / BUG-5 from the fresh QA report:** Search limit now selects on focus and clamps entered values to the supported `1` to `50` range.
 - **CODE-7:** Fixed the async `onBackendStatus` cleanup race in the Tauri desktop bridge with a cancellation guard.
 
+Additional fixes from the follow-up pass:
+
+- **BUG-2 / USA-1:** Settings Reset now stays visibly staged, exposes a Cancel reset action, and opens a confirmation dialog before applying defaults. The dialog calls out indexed sources that will need reindexing.
+- **UX-1:** The Settings Save button now uses native `disabled` when saving is unavailable.
+- **UX-7 / CODE-6:** Added a route-level React Error Boundary with a Reload recovery action.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -25,8 +31,9 @@ Verification run after the fixes:
 | `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (32 tests) |
 | `npm --prefix frontend run lint` | Pass |
 | `npm --prefix frontend run build` | Pass |
+| Browser verification at `http://127.0.0.1:1420/#/settings` | Pass: Reset banner, confirmation dialog, cancel path, and Settings render verified |
 
-Still open from this report: BUG-2, BUG-3, UX-1, UX-2, UX-4, UX-5, UX-6, UX-7, and the remaining lower-priority cleanup/performance items.
+Still open from this report: BUG-3, UX-2, UX-4, UX-5, UX-6, and the remaining lower-priority cleanup/performance items.
 
 ---
 

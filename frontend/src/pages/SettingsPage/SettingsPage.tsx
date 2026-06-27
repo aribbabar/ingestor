@@ -10,6 +10,7 @@ import type {
   SkillTargetsResponse,
   StartupSettings,
 } from '../../types'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog/ConfirmDialog'
 import { MessageLine } from '../../components/ui/MessageLine/MessageLine'
 import { PageHeading } from '../../components/ui/PageHeading/PageHeading'
 import { SelectControl } from '../../components/ui/SelectControl/SelectControl'
@@ -30,7 +31,7 @@ type SettingsPageProps = {
   isAddingCliPath: boolean
   isCheckingUpdate: boolean
   isInstallingUpdate: boolean
-  onSaveSettings: (request: SettingsSaveRequest) => Promise<void>
+  onSaveSettings: (request: SettingsSaveRequest) => Promise<SettingsResponse | null>
   onSyncSkills: (targetIds?: string[]) => Promise<void>
   onSetStartupEnabled: (enabled: boolean) => Promise<void>
   onAddCliToPath: () => Promise<void>
@@ -91,6 +92,7 @@ export function SettingsPage({
   const [draftBatchSize, setDraftBatchSize] = useState<string | null>(null)
   const [draftRetrievalMode, setDraftRetrievalMode] = useState<SearchMode | null>(null)
   const [isResetPending, setIsResetPending] = useState(false)
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false)
   const isOllamaChecking = !ollamaModels
   const isOllamaReachable = Boolean(ollamaModels?.reachable)
   const ollamaModelNames = useMemo(() => ollamaModels?.models ?? [], [ollamaModels?.models])
@@ -147,20 +149,41 @@ export function SettingsPage({
 
   function resetDraftToDefaults() {
     setIsResetPending(true)
+    setIsResetConfirmOpen(false)
     setDraftModel(null)
     setDraftIndexingStrategy(defaultIndexingStrategy)
     setDraftBatchSize(String(defaultBatchSize))
     setDraftRetrievalMode(DEFAULT_RETRIEVAL_MODE)
   }
 
+  function cancelResetDraft() {
+    setIsResetPending(false)
+    setIsResetConfirmOpen(false)
+    setDraftModel(null)
+    setDraftIndexingStrategy(null)
+    setDraftBatchSize(null)
+    setDraftRetrievalMode(null)
+  }
+
+  function requestSaveSettings() {
+    if (!canSaveSettings) return
+    if (isResetPending) {
+      setIsResetConfirmOpen(true)
+      return
+    }
+    void saveSettings()
+  }
+
   async function saveSettings() {
     if (!canSaveSettings) return
-    await onSaveSettings({
+    const nextSettings = await onSaveSettings({
       resetToDefaults: isResetPending,
       model: modelChanged ? selectedModel : null,
       indexing: indexingChanged ? { strategy: selectedIndexingStrategy, batchSize: selectedBatchSize } : null,
       retrievalMode: retrievalChanged ? selectedRetrievalMode : null,
     })
+    if (!nextSettings) return
+    setIsResetConfirmOpen(false)
     setIsResetPending(false)
     setDraftModel(null)
     setDraftIndexingStrategy(null)
@@ -186,13 +209,22 @@ export function SettingsPage({
             className={styles.saveButton}
             aria-disabled={isSaveUnavailable}
             data-disabled={isSaveUnavailable || undefined}
-            disabled={isSavingSettings}
+            disabled={isSaveUnavailable}
             type="button"
-            onClick={() => void saveSettings()}
+            onClick={requestSaveSettings}
           >
             {isSavingSettings ? 'Saving...' : 'Save'}
           </button>
         </div>
+
+        {isResetPending ? (
+          <div className={styles.resetNotice}>
+            <span>{resetPendingMessage(staleSourceCount)}</span>
+            <button type="button" onClick={cancelResetDraft}>
+              Cancel reset
+            </button>
+          </div>
+        ) : null}
 
         <div className={styles.settingsRows}>
           <div className={styles.settingRow}>
@@ -444,6 +476,32 @@ export function SettingsPage({
           )}
         </div>
       </section>
+
+      {isResetConfirmOpen ? (
+        <ConfirmDialog
+          title="Reset settings?"
+          description={resetConfirmDescription(staleSourceCount)}
+          confirmLabel="Reset settings"
+          confirmBusyLabel="Resetting..."
+          isConfirming={isSavingSettings}
+          onCancel={() => setIsResetConfirmOpen(false)}
+          onConfirm={() => void saveSettings()}
+        />
+      ) : null}
     </main>
   )
+}
+
+function resetPendingMessage(staleSourceCount: number) {
+  if (!staleSourceCount) return 'Reset to defaults is staged. Save will apply the default settings.'
+  return `Reset to defaults is staged. Saving will require ${formatIndexedSourceCount(staleSourceCount)} to be re-indexed before search.`
+}
+
+function resetConfirmDescription(staleSourceCount: number) {
+  if (!staleSourceCount) return 'This will restore the default embedding, indexing, and retrieval settings.'
+  return `This will restore default settings and require ${formatIndexedSourceCount(staleSourceCount)} to be re-indexed before search works for them.`
+}
+
+function formatIndexedSourceCount(count: number) {
+  return `${count} indexed source${count === 1 ? '' : 's'}`
 }
