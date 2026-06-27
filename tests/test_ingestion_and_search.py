@@ -457,6 +457,47 @@ class VectorIndexTests(TestCase):
                 source_service.get_settings = original_get_settings
                 test_db.engine.dispose()
 
+    def test_reindex_refreshes_snapshot_from_changed_original_files(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            root = Path(directory)
+            docs = root / "docs"
+            docs.mkdir()
+            guide = docs / "guide.md"
+            guide.write_text("# Guide\n\nOriginal snapshot content.", encoding="utf-8")
+            snapshot_root = root / "local"
+            db_path = root / "ingestor.sqlite"
+            test_db = Database(db_path)
+            original_db = source_service.db
+            original_get_settings = source_service.get_settings
+
+            class Settings:
+                local_source_dir = snapshot_root
+
+            try:
+                source_service.db = test_db
+                source_service.get_settings = lambda: Settings()
+                source = source_service.register_local_source(source_service.LocalSourceRequest(paths=[docs], name="docs"))
+                indexed = source_service.index_source(source.id)
+                old_snapshot_dir = Path(str(indexed.metadata["snapshot_dir"]))
+
+                guide.write_text("# Guide\n\nUpdated source folder content.", encoding="utf-8")
+                reindexed = source_service.index_source(source.id)
+
+                with sqlite3.connect(db_path) as connection:
+                    chunk_text = "\n".join(
+                        row[0] for row in connection.execute("SELECT content FROM chunks WHERE source_id = ?", (source.id,))
+                    )
+
+                self.assertEqual(reindexed.status, SourceStatus.INDEXED)
+                self.assertIn("Updated source folder content", chunk_text)
+                self.assertNotIn("Original snapshot content", chunk_text)
+                self.assertFalse(old_snapshot_dir.exists())
+                self.assertTrue(Path(str(reindexed.metadata["snapshot_dir"])).exists())
+            finally:
+                source_service.db = original_db
+                source_service.get_settings = original_get_settings
+                test_db.engine.dispose()
+
     def test_running_job_can_be_found_for_source(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             test_db = Database(Path(directory) / "ingestor.sqlite")

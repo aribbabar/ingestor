@@ -150,8 +150,11 @@ def safe_path_name(value: str) -> str:
 def local_source_paths(source: SourceRecord) -> tuple[list[Path], list[Path] | None]:
     snapshot_paths = metadata_path_list(source, "snapshot_paths")
     original_paths = local_source_original_paths(source)
+    if original_paths and should_refresh_local_snapshot(source) and all(path.exists() for path in original_paths):
+        return refresh_local_snapshot(source, original_paths), original_paths
+
     if snapshot_paths and all(path.exists() for path in snapshot_paths):
-        return snapshot_paths, original_paths if len(original_paths) == len(snapshot_paths) else None
+        return snapshot_paths, None
 
     if snapshot_paths and original_paths:
         return refresh_local_snapshot(source, original_paths), original_paths
@@ -164,6 +167,10 @@ def local_source_paths(source: SourceRecord) -> tuple[list[Path], list[Path] | N
         return refresh_local_snapshot(source, original_paths), original_paths
 
     raise FileNotFoundError(f"No local paths are available to re-index {source.name}. Re-add the source from its original files.")
+
+
+def should_refresh_local_snapshot(source: SourceRecord) -> bool:
+    return source.status != SourceStatus.REGISTERED or source.document_count > 0 or source.chunk_count > 0
 
 
 def metadata_path_list(source: SourceRecord, key: str) -> list[Path]:

@@ -41,13 +41,18 @@ Capture layout fixes from this pass:
 
 - **UX-6:** Moved the web indexing submit action above Advanced crawl options so the primary action stays reachable when the details panel is expanded.
 
+Local reindex correctness fixes from this pass:
+
+- **CODE-8:** Local reindex now refreshes the stored snapshot from `original_paths` when the original files are available, so changed local docs are indexed instead of reusing stale snapshot content.
+
 Verification run after the fixes:
 
 | Check | Result |
 |---|---|
 | `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k missing_local_snapshot` | Pass |
 | `backend\.venv\Scripts\python.exe -m compileall backend\app` | Pass |
-| `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (32 tests) |
+| `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k "missing_local_snapshot or refreshes_snapshot"` | Pass |
+| `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (33 tests) |
 | `npm --prefix frontend run lint` | Pass |
 | `npm --prefix frontend run build` | Pass |
 | Browser verification at `http://127.0.0.1:1420/#/settings` | Pass: Reset banner, confirmation dialog, cancel path, and Settings render verified |
@@ -56,7 +61,7 @@ Verification run after the fixes:
 | Browser verification at `http://127.0.0.1:1420/#/sources` search states | Pass: initial "No search has been run yet" and completed "No matching results" states verified |
 | Browser verification at `http://127.0.0.1:1420/#/capture` web tab | Pass: Index website action appears before expanded Advanced crawl options and the advanced fields remain visible below it |
 
-Still open from this report: UX-4, UX-8, UX-9, USA-3 through USA-7, the remaining performance items, and CODE-3, CODE-7, CODE-8, CODE-9, and CODE-10.
+Still open from this report: UX-4, UX-8, UX-9, USA-3 through USA-7, the remaining performance items, and CODE-3, CODE-7, CODE-9, and CODE-10.
 
 ---
 
