@@ -25,8 +25,10 @@ class SourceStatus(StrEnum):
 
 class JobStatus(StrEnum):
     RUNNING = "running"
+    CANCELLING = "cancelling"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class SearchMode(StrEnum):
@@ -81,6 +83,9 @@ class JobRecord(BaseModel):
     source_id: str
     status: JobStatus = JobStatus.RUNNING
     message: str = ""
+    progress_current: int = 0
+    progress_total: int | None = None
+    progress_label: str = ""
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

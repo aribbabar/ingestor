@@ -2,7 +2,7 @@ import type { FormEvent } from 'react'
 
 export type SourceKind = 'local' | 'web'
 export type SourceStatus = 'registered' | 'indexing' | 'indexed' | 'failed'
-export type JobStatus = 'running' | 'succeeded' | 'failed'
+export type JobStatus = 'running' | 'cancelling' | 'succeeded' | 'failed' | 'cancelled'
 export type SourceMode = 'local' | 'web'
 export type CrawlScope = 'subpages' | 'hostname' | 'domain'
 export type ViewName = 'capture' | 'sources' | 'settings'
@@ -32,6 +32,9 @@ export type IndexJob = {
   source_id: string
   status: JobStatus
   message: string
+  progress_current: number
+  progress_total: number | null
+  progress_label: string
   created_at: string
   updated_at: string
 }

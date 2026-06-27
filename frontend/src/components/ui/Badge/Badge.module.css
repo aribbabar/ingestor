@@ -21,6 +21,12 @@
   color: oklch(43% 0.11 150);
 }
 
+.cancelled {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
 .failed {
   background: oklch(97% 0.025 25);
   border-color: oklch(87% 0.08 25);
@@ -29,6 +35,7 @@
 
 .indexing,
 .running,
+.cancelling,
 .web {
   background: var(--accent-soft);
   border-color: oklch(84% 0.06 190);

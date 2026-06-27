@@ -1,4 +1,4 @@
-import type { FormSubmitHandler, Message, SearchMode, SearchResponse, SettingsResponse, SourceRecord } from '../../types'
+import type { FormSubmitHandler, IndexJob, Message, SearchMode, SearchResponse, SettingsResponse, SourceRecord } from '../../types'
 import { Badge } from '../../components/ui/Badge/Badge'
 import { MessageLine } from '../../components/ui/MessageLine/MessageLine'
 import { PageHeading } from '../../components/ui/PageHeading/PageHeading'
@@ -17,8 +17,10 @@ type SourcesPageProps = {
   selectedSource: SourceRecord | undefined
   settings: SettingsResponse | null
   reindexingSourceId: string | null
+  jobs: IndexJob[]
   sources: SourceRecord[]
   totalSourceCount: number
+  onCancelJob: (job: IndexJob) => Promise<void>
   onRequestDeleteSource: (source: SourceRecord) => void
   onQueryChange: (query: string) => void
   onRefreshSources: () => Promise<void>
@@ -46,8 +48,10 @@ export function SourcesPage({
   selectedSource,
   settings,
   reindexingSourceId,
+  jobs,
   sources,
   totalSourceCount,
+  onCancelJob,
   onRequestDeleteSource,
   onQueryChange,
   onRefreshSources,
@@ -87,10 +91,12 @@ export function SourcesPage({
         {sources.length ? (
           <div className={styles.sourceList}>
             {sources.map((source) => {
+              const sourceJob = jobs.find((job) => job.source_id === source.id)
               const sourceQueryable = isSourceQueryable(source, settings)
               const metadata = sourceMetadata(source)
               const metadataItems = sourceMetadataItems(metadata)
-              const isReindexing = reindexingSourceId === source.id || source.status === 'indexing'
+              const isActiveIndex = Boolean(sourceJob && isActiveJob(sourceJob))
+              const isReindexing = reindexingSourceId === source.id || isActiveIndex || source.status === 'indexing'
               return (
                 <div
                   aria-current={selectedSource?.id === source.id ? 'true' : undefined}
@@ -105,6 +111,7 @@ export function SourcesPage({
                       <strong>{source.name}</strong>
                       <span title={source.location}>{source.location}</span>
                     </span>
+                    {sourceJob && isActiveJob(sourceJob) ? <JobProgress job={sourceJob} source={source} /> : null}
                     {metadataItems.length ? (
                       <dl className={styles.sourceDetails}>
                         {metadataItems.map((item) => (
@@ -133,6 +140,16 @@ export function SourcesPage({
                     >
                       {isReindexing ? 'Indexing' : 'Reindex'}
                     </button>
+                    {sourceJob && isActiveJob(sourceJob) ? (
+                      <button
+                        className={styles.dangerButton}
+                        disabled={sourceJob.status === 'cancelling'}
+                        onClick={() => void onCancelJob(sourceJob)}
+                        type="button"
+                      >
+                        {sourceJob.status === 'cancelling' ? 'Cancelling' : 'Cancel'}
+                      </button>
+                    ) : null}
                     <button
                       className={styles.dangerButton}
                       disabled={deletingSourceId === source.id}
@@ -161,7 +178,14 @@ export function SourcesPage({
           </div>
         </div>
         {selectedSource && !selectedSourceQueryable ? (
-          <div className={styles.warningState}>{sourceQueryDisabledMessage(selectedSource, settings)}</div>
+          <div className={styles.warningState}>
+            {sourceQueryDisabledMessage(selectedSource, settings)}
+            {jobs.some((job) => job.source_id === selectedSource.id && isActiveJob(job)) ? (
+              <button className={styles.inlineLinkButton} onClick={() => onSelectSource(selectedSource.id)} type="button">
+                View indexing progress in the registry.
+              </button>
+            ) : null}
+          </div>
         ) : null}
         <form className={styles.searchForm} onSubmit={onSearchDocs}>
           <div className={styles.field}>
@@ -206,6 +230,21 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div>
       <dt>{label}</dt>
       <dd>{value}</dd>
+    </div>
+  )
+}
+
+function JobProgress({ job, source }: { job: IndexJob; source: SourceRecord }) {
+  const progress = jobProgress(job)
+  return (
+    <div className={styles.jobProgress} aria-label={`${source.name} indexing progress`}>
+      <div className={styles.progressTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}>
+        <span style={{ width: `${progress.percent}%` }} />
+      </div>
+      <span>
+        {progress.label}
+        {progress.eta ? ` - ${progress.eta}` : ''}
+      </span>
     </div>
   )
 }
@@ -293,6 +332,42 @@ function sourceCompatibilityLabel(source: SourceRecord, sourceQueryable: boolean
   if (sourceQueryable) return 'queryable'
   if (source.status === 'indexed') return 'reindex required'
   return source.status
+}
+
+function isActiveJob(job: IndexJob) {
+  return job.status === 'running' || job.status === 'cancelling'
+}
+
+function jobProgress(job: IndexJob) {
+  const total = job.progress_total ?? 0
+  const current = Math.max(0, job.progress_current)
+  const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 8
+  const unit = job.progress_label.startsWith('http') ? 'pages' : 'files'
+  const baseLabel =
+    total > 0
+      ? `${current} of ${total} ${unit} scanned`
+      : current > 0
+        ? `${current} ${unit} scanned`
+        : job.status === 'cancelling'
+          ? 'Cancelling'
+          : 'Starting'
+  const detail = job.progress_label && !job.progress_label.startsWith('Scanning ') ? ` - ${job.progress_label}` : ''
+  return {
+    percent,
+    label: `${baseLabel}${detail}`,
+    eta: formatEta(job, current, total),
+  }
+}
+
+function formatEta(job: IndexJob, current: number, total: number) {
+  if (total <= 0 || current <= 0 || current >= total || job.status !== 'running') return undefined
+  const startedAt = new Date(job.created_at).getTime()
+  if (Number.isNaN(startedAt)) return undefined
+  const elapsedSeconds = Math.max(1, (Date.now() - startedAt) / 1000)
+  const secondsRemaining = Math.round((elapsedSeconds / current) * (total - current))
+  if (secondsRemaining < 60) return `about ${secondsRemaining}s left`
+  const minutes = Math.ceil(secondsRemaining / 60)
+  return `about ${minutes}m left`
 }
 
 function formatStrategy(lastIndex: Record<string, unknown> | null) {

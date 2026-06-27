@@ -15,6 +15,8 @@ from app.domain.models import JobRecord, JobStatus, SourceKind, SourceRecord, So
 from app.retrieval import vector_index
 from app.retrieval.embeddings import embedding_signature
 
+_UNSET = object()
+
 
 class Database:
     def __init__(self, path: Path | None = None) -> None:
@@ -60,6 +62,9 @@ class Database:
         self._ensure_column("chunks", "embedding_provider", "TEXT NOT NULL DEFAULT 'local-hashing'")
         self._ensure_column("chunks", "embedding_model", "TEXT NOT NULL DEFAULT 'local-hashing-256'")
         self._ensure_column("chunks", "embedding_dimensions", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("jobs", "progress_current", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("jobs", "progress_total", "INTEGER")
+        self._ensure_column("jobs", "progress_label", "TEXT NOT NULL DEFAULT ''")
         self._backfill_chunk_metadata_columns()
         self._ensure_vector_index()
 
@@ -125,17 +130,34 @@ class Database:
             session.commit()
         return job
 
-    def update_job(self, job: JobRecord, status: JobStatus | None = None, message: str | None = None) -> JobRecord:
+    def update_job(
+        self,
+        job: JobRecord,
+        status: JobStatus | None = None,
+        message: str | None = None,
+        progress_current: int | None = None,
+        progress_total: int | None | object = _UNSET,
+        progress_label: str | None = None,
+    ) -> JobRecord:
         if status is not None:
             job.status = status
         if message is not None:
             job.message = message
+        if progress_current is not None:
+            job.progress_current = progress_current
+        if progress_total is not _UNSET:
+            job.progress_total = progress_total if isinstance(progress_total, int) else None
+        if progress_label is not None:
+            job.progress_label = progress_label
         job.updated_at = utc_now()
         with Session(self.engine) as session:
             row = session.get(JobTable, job.id)
             if row is not None:
                 row.status = self._enum_value(job.status)
                 row.message = job.message
+                row.progress_current = job.progress_current
+                row.progress_total = job.progress_total
+                row.progress_label = job.progress_label
                 row.updated_at = job.updated_at.isoformat()
                 session.add(row)
                 session.commit()
@@ -155,7 +177,10 @@ class Database:
         with Session(self.engine) as session:
             row = session.exec(
                 select(JobTable)
-                .where(JobTable.source_id == source_id, JobTable.status == JobStatus.RUNNING.value)
+                .where(
+                    JobTable.source_id == source_id,
+                    JobTable.status.in_([JobStatus.RUNNING.value, JobStatus.CANCELLING.value]),
+                )
                 .order_by(JobTable.created_at.desc())
                 .limit(1)
             ).first()
@@ -272,6 +297,9 @@ class Database:
             source_id=job.source_id,
             status=self._enum_value(job.status),
             message=job.message,
+            progress_current=job.progress_current,
+            progress_total=job.progress_total,
+            progress_label=job.progress_label,
             created_at=job.created_at.isoformat(),
             updated_at=job.updated_at.isoformat(),
         )
@@ -416,6 +444,9 @@ class Database:
             source_id=row.source_id,
             status=JobStatus(row.status),
             message=row.message,
+            progress_current=row.progress_current,
+            progress_total=row.progress_total,
+            progress_label=row.progress_label,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )

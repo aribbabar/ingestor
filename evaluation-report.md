@@ -21,17 +21,20 @@
 | Fixed | `GET /api/sources/jobs` | Collection endpoint now returns jobs instead of `405`. Verified by live API probe. |
 | Not reproduced | Tauri backend binary mismatch | Current packaging builds `ingestor-daemon.exe` and `ingestor.exe`; `lib.rs` resolves `ingestor-daemon.exe` from bundled `binaries`. No code change needed unless a future installer build disproves this. |
 | Fixed | Background job exception logging | Worker-thread failures now emit traceback-bearing process logs in addition to job status/log updates. Covered by tests. |
-| Open | Cancel running jobs | Requires backend cancellation plumbing and cooperative indexing checks. |
-| Open | Progress estimates | Current UI shows counts but not total progress/ETA. |
+| Fixed | Cancel running jobs | Running jobs can be cancelled through the API and Sources/Capture UI. Active workers stop cooperatively; stale jobs from prior backend processes finalize as `cancelled`. Covered by tests and live API/UI checks. |
+| Fixed | Progress estimates | Jobs now expose structured progress fields. Local indexing shows exact scanned file totals and ETA; web indexing shows discovered page counts. Covered by tests and live API/UI checks. |
 | Fixed | CSP tightening | `tauri.conf.json` now restricts default loading, Tauri IPC, local backend access, image sources, and local styles instead of disabling CSP entirely. |
 
 Verification for the latest remediation pass:
 
 - `backend\.venv\Scripts\python.exe -m pytest tests`
 - `backend\.venv\Scripts\python.exe -m compileall backend\app`
+- `npm --prefix frontend run lint`
 - `npm --prefix frontend run build`
 - `npm --prefix frontend run tauri -- info`
 - JSON parse check for `frontend/src-tauri/tauri.conf.json`
+- Live API check: local job cancellation moved from `cancelling` to `cancelled`; completed local job reported `progress_current=3` and `progress_total=3`.
+- Live browser check: Sources page rendered row-level progress, Cancel/Cancelling states, and cleared stuck cancellation controls after finalization.
 
 ---
 
@@ -51,9 +54,9 @@ Verification for the latest remediation pass:
 
 | # | Issue | Recommendation |
 |---|-------|----------------|
-| 1 | **No visible progress bar or ETA during indexing.** The Sources page only shows "Indexing" with a document/chunk counter. | Add a linear progress bar and an estimated time remaining, or at least "X of Y files scanned." |
-| 2 | **No way to cancel a running index job.** Once started, users must wait or kill the backend process. | Add a "Cancel indexing" action that sets the job status to `cancelled` and stops the worker thread safely. |
-| 3 | **Search panel on Sources page is disabled with a static message.** When a source is not queryable, the panel explains why but offers no link to view its progress. | Link the disabled message to the selected source row or its progress details. |
+| 1 | **Fixed.** No visible progress bar or ETA during indexing. The Sources page only shows "Indexing" with a document/chunk counter. | Sources and Capture now render job progress bars. Local jobs show exact scanned file totals and ETA when possible; web jobs show discovered page counts. |
+| 2 | **Fixed.** No way to cancel a running index job. Once started, users must wait or kill the backend process. | Sources and Capture now expose a cancel action. Backend jobs transition through `cancelling` and finalize as `cancelled`; stale jobs from previous backend processes can also be cleared. |
+| 3 | **Fixed.** Search panel on Sources page is disabled with a static message. When a source is not queryable, the panel explains why but offers no link to view its progress. | Disabled search messaging now links users back to registry progress when the selected source has an active indexing job. |
 | 4 | **Settings dropdown labels are verbose and duplicated.** Each option repeats the category name ("Hybrid Combine full text...", "Full text Use SQLite FTS5..."). | Use short labels with tooltips or secondary description text. |
 | 5 | **Fixed.** The "Check" update button gives no feedback about network/updater configuration. In a dev build it is unclear whether it does anything. | Updater section is hidden when the Tauri desktop bridge is unavailable. |
 | 6 | **Fixed.** "Start with Windows" checkbox is shown in the dev build even though `startupSettings.supported` is false. | Desktop behavior section is hidden when the Tauri desktop bridge is unavailable. |
@@ -73,7 +76,7 @@ Verification for the latest remediation pass:
 
 - **Fixed for same source.** Concurrent reindexing of the same folder is allowed. Starting a second index on `eval-test-frontend-src-tauri` while `test-src-tauri` was already running caused both jobs to run simultaneously. For large folders this can exhaust CPU/disk and create SQLite write contention.
 - **Fixed for exact local path duplicates.** No deduplication of identical snapshots. Two sources pointing to the same physical folder (`frontend/src-tauri`) create two independent snapshots and two independent indexes, doubling storage.
-- **Partially fixed.** Indexing thread is unbounded and not cancellable. `_run_job` now logs traceback-bearing failures to the process logger, but cancellation still requires backend cancellation plumbing and cooperative indexing checks.
+- **Fixed.** Indexing jobs are cancellable through cooperative checks between local files and crawled pages. `_run_job` also logs traceback-bearing failures to the process logger.
 - **Backend SQLite writes happen per-document.** For a 1,500-file local snapshot this is acceptable on SSD, but for larger docs folders or web crawls it could become a bottleneck.
 
 ---
@@ -94,7 +97,7 @@ Verification for the latest remediation pass:
 1. ~~Make the Local docs form submit button visible and accessible (fix CSS/layout and ensure it is in the tab order and UIA tree).~~ Fixed.
 2. ~~Populate real metadata in the Sources list or remove the placeholder labels.~~ Fixed.
 3. ~~Harden the default ignore/exclude patterns to skip `target/**`, `.git/**`, `.venv/**`, IDE dirs, and lockfiles.~~ Fixed.
-4. Add a cancel action for running index jobs. Starting a new job on the same source is now blocked.
+4. ~~Add a cancel action for running index jobs. Starting a new job on the same source is now blocked.~~ Fixed.
 
 ### Medium
 5. Have the Tauri shell auto-start the daemon or show a clear "daemon not running" state with a start button.

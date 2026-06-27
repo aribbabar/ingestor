@@ -304,7 +304,7 @@ function App() {
   }, [refreshCliPathSettings, refreshSettings, refreshSources, refreshStartupSettings])
 
   useEffect(() => {
-    if (!latestJob || latestJob.status !== 'running') return
+    if (!latestJob || !isActiveJob(latestJob)) return
     const timer = window.setInterval(() => {
       void refreshSources()
       void refreshJob(latestJob.id)
@@ -580,6 +580,26 @@ function App() {
     }
   }
 
+  async function cancelJob(job: IndexJob, view: ViewName = 'sources') {
+    setMessage(null)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sources/jobs/${job.id}/cancel`, {
+        method: 'POST',
+      })
+      if (!response.ok) throw new Error(await readErrorMessage(response))
+      const payload = (await response.json()) as { job: IndexJob; logs: string }
+      setJobs((current) => [payload.job, ...current.filter((currentJob) => currentJob.id !== payload.job.id)])
+      setActiveLogs(payload.logs)
+      await refreshSources()
+      showMessage(view, { text: 'Index cancellation requested', tone: 'success' })
+    } catch (error) {
+      showMessage(view, {
+        text: error instanceof Error ? error.message : 'Unable to cancel indexing',
+        tone: 'error',
+      })
+    }
+  }
+
   async function deleteSource() {
     if (!sourcePendingDelete) return
 
@@ -812,6 +832,7 @@ function App() {
               onResetWebOptions={resetWebOptions}
               onNavigate={(view) => navigate(`/${view}`)}
               onSelectSource={selectSource}
+              onCancelJob={(job) => cancelJob(job, 'capture')}
             />
           }
         />
@@ -829,8 +850,10 @@ function App() {
               selectedSource={selectedSource}
               settings={settings}
               reindexingSourceId={reindexingSourceId}
+              jobs={jobs}
               sources={sortedSources}
               totalSourceCount={sources.length}
+              onCancelJob={(job) => cancelJob(job, 'sources')}
               onQueryChange={setQuery}
               onRefreshSources={refreshSources}
               onReindexSource={reindexSource}
@@ -1002,6 +1025,10 @@ function isSourceQueryable(source: SourceRecord | undefined, settings: SettingsR
   const embedding = source.metadata.embedding
   if (!settings || !isRecord(embedding)) return false
   return embedding.provider === settings.embedding.provider && embedding.model === settings.embedding.model
+}
+
+function isActiveJob(job: IndexJob) {
+  return job.status === 'running' || job.status === 'cancelling'
 }
 
 function sourceQueryDisabledMessage(source: SourceRecord, settings: SettingsResponse | null) {

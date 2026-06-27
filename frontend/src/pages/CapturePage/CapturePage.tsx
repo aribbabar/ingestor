@@ -38,6 +38,7 @@ type CapturePageProps = {
   onResetWebOptions: () => void;
   onNavigate: (view: ViewName) => void;
   onSelectSource: (sourceId: string) => void;
+  onCancelJob: (job: IndexJob) => void;
 };
 
 const crawlScopeOptions: {
@@ -84,7 +85,8 @@ export function CapturePage({
   onRegisterWeb,
   onResetWebOptions,
   onNavigate,
-  onSelectSource
+  onSelectSource,
+  onCancelJob
 }: CapturePageProps) {
   const isLocal = mode === "local";
   const isPickingLocalPath = isPickingFolder || isPickingFiles;
@@ -367,13 +369,14 @@ export function CapturePage({
                 </span>
               </div>
             </div>
+            <JobProgress job={latestJob} />
             <ol className={styles.stageList}>
               <li className={styles.done}>
                 <span /> Registered
               </li>
               <li
                 className={
-                  latestJob.status === "running" ? styles.active : styles.done
+                  isActiveJob(latestJob) ? styles.active : styles.done
                 }
               >
                 <span /> Ingesting
@@ -392,6 +395,18 @@ export function CapturePage({
               <span>Job {latestJob.id.slice(0, 8)}</span>
               <span>{latestJob.message || selectedSource.location}</span>
             </div>
+            {isActiveJob(latestJob) ? (
+              <div className={styles.progressActions}>
+                <button
+                  className={styles.dangerButton}
+                  disabled={latestJob.status === "cancelling"}
+                  onClick={() => onCancelJob(latestJob)}
+                  type="button"
+                >
+                  {latestJob.status === "cancelling" ? "Cancelling" : "Cancel indexing"}
+                </button>
+              </div>
+            ) : null}
             {selectedSource.error || lastLogLine ? (
               <p className={styles.logLine}>
                 {selectedSource.error ?? lastLogLine}
@@ -453,6 +468,61 @@ export function CapturePage({
 
 function latestLogLine(logs: string) {
   return latestLogLines(logs, 1).at(0);
+}
+
+function JobProgress({ job }: { job: IndexJob }) {
+  const progress = jobProgress(job);
+  return (
+    <div className={styles.jobProgress}>
+      <div
+        className={styles.progressTrack}
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress.percent}
+      >
+        <span style={{ width: `${progress.percent}%` }} />
+      </div>
+      <span>
+        {progress.label}
+        {progress.eta ? ` - ${progress.eta}` : ""}
+      </span>
+    </div>
+  );
+}
+
+function isActiveJob(job: IndexJob) {
+  return job.status === "running" || job.status === "cancelling";
+}
+
+function jobProgress(job: IndexJob) {
+  const total = job.progress_total ?? 0;
+  const current = Math.max(0, job.progress_current);
+  const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 8;
+  const unit = job.progress_label.startsWith("http") ? "pages" : "files";
+  const label =
+    total > 0
+      ? `${current} of ${total} ${unit} scanned`
+      : current > 0
+        ? `${current} ${unit} scanned`
+        : job.status === "cancelling"
+          ? "Cancelling"
+          : "Starting";
+  return {
+    percent,
+    label: job.progress_label && !job.progress_label.startsWith("Scanning ") ? `${label} - ${job.progress_label}` : label,
+    eta: formatEta(job, current, total),
+  };
+}
+
+function formatEta(job: IndexJob, current: number, total: number) {
+  if (total <= 0 || current <= 0 || current >= total || job.status !== "running") return undefined;
+  const startedAt = new Date(job.created_at).getTime();
+  if (Number.isNaN(startedAt)) return undefined;
+  const elapsedSeconds = Math.max(1, (Date.now() - startedAt) / 1000);
+  const secondsRemaining = Math.round((elapsedSeconds / current) * (total - current));
+  if (secondsRemaining < 60) return `about ${secondsRemaining}s left`;
+  return `about ${Math.ceil(secondsRemaining / 60)}m left`;
 }
 
 function latestLogLines(logs: string, limit: number) {

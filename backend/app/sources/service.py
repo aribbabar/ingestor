@@ -26,6 +26,12 @@ from app.domain.models import (
 )
 
 logger = logging.getLogger(__name__)
+active_job_ids: set[str] = set()
+active_jobs_lock = threading.Lock()
+
+
+class IndexCancelled(RuntimeError):
+    """Raised when a running indexing job receives a cancellation request."""
 
 
 def register_local_source(request: LocalSourceRequest) -> SourceRecord:
@@ -193,6 +199,7 @@ def index_source(source_id: str, job: JobRecord | None = None) -> SourceRecord:
     log(job, f"Indexing {source.name} ({source.kind})")
 
     try:
+        ensure_job_not_cancelled(job)
         if source.kind == SourceKind.LOCAL:
             indexed = index_local_source_incrementally(source, job)
         else:
@@ -217,6 +224,15 @@ def index_source(source_id: str, job: JobRecord | None = None) -> SourceRecord:
         if job:
             db.update_job(job, JobStatus.SUCCEEDED, "Index complete")
         return indexed
+    except IndexCancelled as exc:
+        source = db.get_source(source.id) or source
+        source.status = SourceStatus.REGISTERED
+        source.error = str(exc)
+        db.upsert_source(source)
+        log(job, str(exc))
+        if job:
+            db.update_job(job, JobStatus.CANCELLED, str(exc))
+        raise
     except Exception as exc:
         source.status = SourceStatus.FAILED
         source.error = str(exc)
@@ -233,17 +249,49 @@ def start_index_job(source_id: str) -> JobRecord:
         raise RuntimeError(f"Indexing is already running for this source as job {running_job.id}.")
 
     job = db.create_job(source_id)
+    with active_jobs_lock:
+        active_job_ids.add(job.id)
     thread = threading.Thread(target=_run_job, args=(source_id, job), daemon=True)
     thread.start()
     return job
 
 
+def cancel_index_job(job_id: str) -> JobRecord | None:
+    job = db.get_job(job_id)
+    if job is None:
+        return None
+    if job.status == JobStatus.CANCELLED:
+        mark_source_cancelled(job.source_id)
+        return job
+    with active_jobs_lock:
+        is_active = job.id in active_job_ids
+    if job.status == JobStatus.CANCELLING and not is_active:
+        log(job, "Indexing cancelled")
+        mark_source_cancelled(job.source_id)
+        return db.update_job(job, JobStatus.CANCELLED, "Indexing cancelled.")
+    if job.status == JobStatus.CANCELLING:
+        return job
+    if job.status != JobStatus.RUNNING:
+        raise RuntimeError(f"Only running jobs can be cancelled. Job {job.id} is {job.status}.")
+    if not is_active:
+        log(job, "Indexing cancelled")
+        mark_source_cancelled(job.source_id)
+        return db.update_job(job, JobStatus.CANCELLED, "Indexing cancelled.")
+    log(job, "Cancellation requested")
+    return db.update_job(job, JobStatus.CANCELLING, "Cancellation requested")
+
+
 def _run_job(source_id: str, job: JobRecord) -> None:
     try:
         index_source(source_id, job)
+    except IndexCancelled:
+        return
     except Exception:
         logger.exception("Index job %s failed for source %s", job.id, source_id)
         return
+    finally:
+        with active_jobs_lock:
+            active_job_ids.discard(job.id)
 
 
 def index_local_source_incrementally(source: SourceRecord, job: JobRecord | None) -> SourceRecord:
@@ -252,8 +300,19 @@ def index_local_source_incrementally(source: SourceRecord, job: JobRecord | None
     indexed = source
     log(job, "Scanning local snapshot for supported docs")
 
-    for document in iter_documents_from_paths(paths, uri_paths):
+    def on_scan(current: int, total: int, file_path: Path) -> None:
+        update_job_progress(job, current, total, f"Scanning {file_path.name}")
+
+    for document in iter_documents_from_paths(
+        paths,
+        uri_paths,
+        on_scan=on_scan,
+        should_cancel=lambda: ensure_job_not_cancelled(job),
+    ):
+        ensure_job_not_cancelled(job)
         indexed = db.add_source_document(source, document)
+        if job:
+            update_job_progress(job, job.progress_current, job.progress_total, document["uri"])
         log(
             job,
             f"Indexed file {indexed.document_count}: {document['uri']} "
@@ -281,7 +340,14 @@ async def index_web_source_incrementally(source: SourceRecord, job: JobRecord | 
         include_patterns=list(source.metadata.get("include_patterns", [])),
         exclude_patterns=list(source.metadata.get("exclude_patterns", [])),
     ):
+        ensure_job_not_cancelled(job)
         indexed = db.add_source_document(source, document)
+        update_job_progress(
+            job,
+            indexed.document_count,
+            None,
+            document["uri"],
+        )
         log(
             job,
             f"Indexed page {indexed.document_count}: {document['uri']} "
@@ -294,6 +360,34 @@ async def index_web_source_incrementally(source: SourceRecord, job: JobRecord | 
     indexed.status = SourceStatus.INDEXED
     indexed.error = None
     return db.upsert_source(indexed)
+
+
+def ensure_job_not_cancelled(job: JobRecord | None) -> None:
+    if job is None:
+        return
+    current = db.get_job(job.id)
+    if current and current.status in {JobStatus.CANCELLING, JobStatus.CANCELLED}:
+        raise IndexCancelled("Indexing cancelled.")
+
+
+def update_job_progress(job: JobRecord | None, current: int, total: int | None, label: str) -> None:
+    if job is None:
+        return
+    db.update_job(
+        job,
+        progress_current=current,
+        progress_total=total,
+        progress_label=label,
+    )
+
+
+def mark_source_cancelled(source_id: str) -> None:
+    source = db.get_source(source_id)
+    if source is None:
+        return
+    source.status = SourceStatus.REGISTERED
+    source.error = "Indexing cancelled."
+    db.upsert_source(source)
 
 
 def log(job: JobRecord | None, message: str) -> None:

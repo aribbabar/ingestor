@@ -159,6 +159,37 @@
   margin-top: var(--space-3);
 }
 
+.jobProgress {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.progressTrack {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  height: 8px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.progressTrack span {
+  background: var(--accent);
+  display: block;
+  height: 100%;
+  min-width: 8px;
+  transition: width 160ms ease;
+}
+
+.jobProgress > span {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sourceMeta {
   align-items: center;
   display: flex;
@@ -317,8 +348,23 @@
   background: oklch(98% 0.02 75);
   border-color: oklch(86% 0.08 75);
   color: oklch(42% 0.1 65);
+  display: grid;
+  gap: var(--space-3);
   margin-bottom: var(--space-5);
   text-align: left;
+}
+
+.inlineLinkButton {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  width: fit-content;
 }
 
 .errorState {

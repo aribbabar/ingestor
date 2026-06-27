@@ -29,6 +29,9 @@ class JobTable(SQLModel, table=True):
     source_id: str = Field(sa_column=Column(String, ForeignKey("sources.id", ondelete="CASCADE"), nullable=False))
     status: str = Field(sa_column=Column(String, nullable=False))
     message: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
+    progress_current: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
+    progress_total: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
+    progress_label: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
     created_at: str = Field(sa_column=Column(String, nullable=False))
     updated_at: str = Field(sa_column=Column(String, nullable=False))
 

@@ -34,7 +34,7 @@ from app.domain.models import (
 )
 from app.retrieval.search import SourceNotQueryableError, current_embedding_display, search_chunks, stale_indexed_source_count
 from app.retrieval.settings import get_default_search_mode, reset_default_search_mode, set_default_search_mode
-from app.sources.service import delete_source as delete_registered_source
+from app.sources.service import cancel_index_job, delete_source as delete_registered_source
 from app.sources.service import read_job_log, register_local_source, register_web_source, start_index_job
 
 router = APIRouter(prefix="/api")
@@ -200,6 +200,17 @@ def list_jobs() -> dict:
 @router.get("/sources/jobs/{job_id}")
 def get_job(job_id: str) -> dict:
     job = db.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    return {"job": job, "logs": read_job_log(job_id)}
+
+
+@router.post("/sources/jobs/{job_id}/cancel")
+def cancel_job(job_id: str) -> dict:
+    try:
+        job = cancel_index_job(job_id)
+    except RuntimeError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     return {"job": job, "logs": read_job_log(job_id)}

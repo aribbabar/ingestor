@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from app.indexing.chunking import build_document
@@ -49,24 +50,33 @@ def documents_from_paths(paths: list[Path], uri_paths: list[Path] | None = None)
     return list(iter_documents_from_paths(paths, uri_paths))
 
 
-def iter_documents_from_paths(paths: list[Path], uri_paths: list[Path] | None = None):
+def iter_documents_from_paths(
+    paths: list[Path],
+    uri_paths: list[Path] | None = None,
+    *,
+    on_scan: Callable[[int, int, Path], None] | None = None,
+    should_cancel: Callable[[], None] | None = None,
+):
     pending_documents: list[dict] = []
     pending_chunks: list[dict] = []
     indexing_config = get_embedding_indexing_config()
     batch_size = indexing_config.effective_batch_size
+    candidates_by_path = document_candidates(paths, uri_paths)
+    total_candidates = sum(len(candidates) for _root, _uri_root, _is_file, candidates in candidates_by_path)
+    scanned = 0
 
-    for index, selected_path in enumerate(paths):
-        path = selected_path.expanduser().resolve()
-        if not path.exists():
-            raise FileNotFoundError(f"Path does not exist: {path}")
-        uri_path = uri_paths[index].expanduser().resolve() if uri_paths and index < len(uri_paths) else path
-        candidates = [path] if path.is_file() else iter_files(path)
+    for path, uri_path, uri_is_file, candidates in candidates_by_path:
         for file_path in candidates:
+            if should_cancel:
+                should_cancel()
+            scanned += 1
+            if on_scan:
+                on_scan(scanned, total_candidates, file_path)
             document = document_from_file(
                 file_path,
                 path if path.is_dir() else path.parent,
                 uri_path=uri_path,
-                uri_is_file=path.is_file(),
+                uri_is_file=uri_is_file,
                 embed=False,
             )
             if document:
@@ -74,11 +84,25 @@ def iter_documents_from_paths(paths: list[Path], uri_paths: list[Path] | None = 
                 pending_chunks.extend(document["chunks"])
                 if len(pending_chunks) >= batch_size:
                     yield from embed_pending_documents(pending_documents, pending_chunks, batch_size)
+                    if should_cancel:
+                        should_cancel()
                     pending_documents = []
                     pending_chunks = []
 
     if pending_documents:
         yield from embed_pending_documents(pending_documents, pending_chunks, batch_size)
+
+
+def document_candidates(paths: list[Path], uri_paths: list[Path] | None = None) -> list[tuple[Path, Path, bool, list[Path]]]:
+    candidates_by_path: list[tuple[Path, Path, bool, list[Path]]] = []
+    for index, selected_path in enumerate(paths):
+        path = selected_path.expanduser().resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"Path does not exist: {path}")
+        uri_path = uri_paths[index].expanduser().resolve() if uri_paths and index < len(uri_paths) else path
+        candidates = [path] if path.is_file() else iter_files(path)
+        candidates_by_path.append((path, uri_path, path.is_file(), candidates))
+    return candidates_by_path
 
 
 def iter_files(root: Path) -> list[Path]:

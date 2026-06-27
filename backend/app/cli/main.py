@@ -12,7 +12,7 @@ from app.cli.client import ApiConnectionError, ApiError, DEFAULT_BASE_URL, ensur
 from app.cli.output import print_json, print_list, print_search
 from app.domain.models import SearchMode
 
-FINAL_JOB_STATUSES = {"succeeded", "completed", "failed"}
+FINAL_JOB_STATUSES = {"succeeded", "completed", "failed", "cancelled"}
 
 
 class TextOutputFormat(StrEnum):

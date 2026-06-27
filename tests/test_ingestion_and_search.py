@@ -18,7 +18,7 @@ from app.indexing.discovery import iter_files
 from app.indexing.chunking import CHUNK_TARGET_CHARS, build_document, split_markdown_sections, split_section_content
 import app.sources.service as source_service
 from app.sources.service import ignore_snapshot_entries
-from app.domain.models import JobRecord, SearchMode, SourceKind, SourceRecord
+from app.domain.models import JobRecord, JobStatus, SearchMode, SourceKind, SourceRecord, SourceStatus
 from app.retrieval.search import assemble_context, diversify_by_document, extract_code, rank_lookup, shape_result
 
 
@@ -435,6 +435,92 @@ class VectorIndexTests(TestCase):
 
                 self.assertEqual(test_db.find_running_job_for_source(source.id), running_job)
             finally:
+                test_db.engine.dispose()
+
+    def test_job_progress_fields_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            test_db = Database(Path(directory) / "ingestor.sqlite")
+            try:
+                source = SourceRecord(
+                    id="progress-source",
+                    kind=SourceKind.LOCAL,
+                    name="progress-source",
+                    version="test",
+                    location="memory",
+                    metadata={"embedding": embedding_signature()},
+                )
+                test_db.upsert_source(source)
+                job = test_db.create_job(source.id)
+
+                test_db.update_job(job, progress_current=3, progress_total=10, progress_label="guide.md")
+                stored_job = test_db.get_job(job.id)
+            finally:
+                test_db.engine.dispose()
+
+        self.assertIsNotNone(stored_job)
+        self.assertEqual(stored_job.progress_current, 3)
+        self.assertEqual(stored_job.progress_total, 10)
+        self.assertEqual(stored_job.progress_label, "guide.md")
+
+    def test_cancelled_job_blocks_duplicate_until_worker_stops(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            test_db = Database(Path(directory) / "ingestor.sqlite")
+            original_db = source_service.db
+            try:
+                source = SourceRecord(
+                    id="cancel-source",
+                    kind=SourceKind.LOCAL,
+                    name="cancel-source",
+                    version="test",
+                    location="memory",
+                    metadata={"embedding": embedding_signature()},
+                )
+                test_db.upsert_source(source)
+                job = test_db.create_job(source.id)
+                source_service.db = test_db
+                with source_service.active_jobs_lock:
+                    source_service.active_job_ids.add(job.id)
+
+                cancelled = source_service.cancel_index_job(job.id)
+
+                self.assertIsNotNone(cancelled)
+                self.assertEqual(cancelled.status, JobStatus.CANCELLING)
+                self.assertEqual(test_db.find_running_job_for_source(source.id).id, job.id)
+                with self.assertRaises(source_service.IndexCancelled):
+                    source_service.ensure_job_not_cancelled(job)
+            finally:
+                with source_service.active_jobs_lock:
+                    source_service.active_job_ids.discard(job.id)
+                source_service.db = original_db
+                test_db.engine.dispose()
+
+    def test_cancel_stale_running_job_finalizes_immediately(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            test_db = Database(Path(directory) / "ingestor.sqlite")
+            original_db = source_service.db
+            try:
+                source = SourceRecord(
+                    id="stale-cancel-source",
+                    kind=SourceKind.LOCAL,
+                    name="stale-cancel-source",
+                    version="test",
+                    location="memory",
+                    metadata={"embedding": embedding_signature()},
+                )
+                test_db.upsert_source(source)
+                job = test_db.create_job(source.id)
+                source_service.db = test_db
+
+                cancelled = source_service.cancel_index_job(job.id)
+
+                self.assertIsNotNone(cancelled)
+                self.assertEqual(cancelled.status, JobStatus.CANCELLED)
+                self.assertIsNone(test_db.find_running_job_for_source(source.id))
+                stored_source = test_db.get_source(source.id)
+                self.assertEqual(stored_source.status, SourceStatus.REGISTERED)
+                self.assertEqual(stored_source.error, "Indexing cancelled.")
+            finally:
+                source_service.db = original_db
                 test_db.engine.dispose()
 
     def test_background_job_failure_is_logged_to_process_logger(self) -> None:
