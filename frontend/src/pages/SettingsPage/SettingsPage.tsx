@@ -129,6 +129,7 @@ export function SettingsPage({
     : selectedRetrievalMode !== savedRetrievalMode
   const hasChanges = isResetPending || modelChanged || indexingChanged || retrievalChanged
   const canSaveSettings = Boolean(settings) && hasChanges && isBatchSizeValid && !isSavingSettings
+  const isSaveUnavailable = !canSaveSettings
   const modelPlaceholder = isResetPending
     ? 'Built-in local hashing'
     : hasOllamaModels
@@ -183,7 +184,9 @@ export function SettingsPage({
           </button>
           <button
             className={styles.saveButton}
-            disabled={!canSaveSettings}
+            aria-disabled={isSaveUnavailable}
+            data-disabled={isSaveUnavailable || undefined}
+            disabled={isSavingSettings}
             type="button"
             onClick={() => void saveSettings()}
           >
@@ -203,6 +206,7 @@ export function SettingsPage({
             <div className={styles.rowControls}>
               <SelectControl
                 id="embedding-model"
+                accessibleLabel="Embedding model"
                 value={selectedModel}
                 disabled={isSavingSettings || !hasOllamaModels}
                 options={ollamaModelOptions}
@@ -230,6 +234,7 @@ export function SettingsPage({
             <div className={styles.indexingControls}>
               <SelectControl
                 id="indexing-strategy"
+                accessibleLabel="Embedding indexing"
                 value={selectedIndexingStrategy}
                 disabled={isSavingSettings}
                 options={indexingStrategyOptions}
@@ -260,6 +265,7 @@ export function SettingsPage({
             <div className={styles.rowControls}>
               <SelectControl
                 id="retrieval-mode"
+                accessibleLabel="Retrieval"
                 value={selectedRetrievalMode}
                 disabled={isSavingSettings}
                 options={retrievalModeOptions}

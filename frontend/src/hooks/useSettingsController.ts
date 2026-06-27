@@ -11,7 +11,6 @@ import type { SettingsSaveRequest } from '../pages/SettingsPage/SettingsPage'
 import type {
   CliPathSettings,
   DesktopUpdateStatus,
-  HealthResponse,
   Message,
   OllamaModelsResponse,
   SettingsResponse,
@@ -27,7 +26,6 @@ type UseSettingsControllerOptions = {
 }
 
 export function useSettingsController({ showMessage }: UseSettingsControllerOptions) {
-  const [, setHealth] = useState<HealthResponse | null>(null)
   const [settings, setSettings] = useState<SettingsResponse | null>(null)
   const [skillTargets, setSkillTargets] = useState<SkillTargetsResponse | null>(null)
   const [startupSettings, setStartupSettings] = useState<StartupSettings | null>(null)
@@ -42,9 +40,8 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false)
 
   const refreshSettings = useCallback(async () => {
-    const { health: healthPayload, settings: settingsPayload, ollamaModels: modelsPayload, skillTargets: skillsPayload } =
+    const { settings: settingsPayload, ollamaModels: modelsPayload, skillTargets: skillsPayload } =
       await loadSettingsBundle()
-    setHealth(healthPayload)
     setSettings(settingsPayload)
     setOllamaModels(modelsPayload)
     setSkillTargets(skillsPayload)

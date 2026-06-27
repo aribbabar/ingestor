@@ -12,6 +12,7 @@ type SelectControlProps<T extends string> = {
   id?: string
   value: T
   options: SelectOption<T>[]
+  accessibleLabel?: string
   disabled?: boolean
   placeholder?: string
   onChange: (value: T) => void
@@ -21,6 +22,7 @@ export function SelectControl<T extends string>({
   id,
   value,
   options,
+  accessibleLabel,
   disabled = false,
   placeholder = 'Select an option',
   onChange,
@@ -30,7 +32,11 @@ export function SelectControl<T extends string>({
   const listboxId = `${buttonId}-listbox`
   const rootRef = useRef<HTMLDivElement>(null)
   const [isOpen, setIsOpen] = useState(false)
-  const selectedOption = options.find((option) => option.value === value)
+  const selectedOptionIndex = options.findIndex((option) => option.value === value)
+  const selectedOption = selectedOptionIndex >= 0 ? options[selectedOptionIndex] : undefined
+  const selectedLabel = selectedOption?.label ?? placeholder
+  const activeDescendantId = isOpen && selectedOption ? `${listboxId}-option-${selectedOptionIndex}` : undefined
+  const buttonLabel = accessibleLabel ? `${accessibleLabel}: ${selectedLabel}` : selectedLabel
 
   useEffect(() => {
     if (!isOpen) return
@@ -73,7 +79,10 @@ export function SelectControl<T extends string>({
     <div className={styles.selectControl} ref={rootRef}>
       <button
         aria-controls={listboxId}
+        aria-activedescendant={activeDescendantId}
         aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-label={buttonLabel}
         className={styles.trigger}
         disabled={disabled || !options.length}
         id={buttonId}
@@ -93,18 +102,19 @@ export function SelectControl<T extends string>({
         type="button"
       >
         <span className={selectedOption ? styles.triggerText : styles.placeholder}>
-          {selectedOption?.label ?? placeholder}
+          {selectedLabel}
         </span>
         <ChevronDown aria-hidden="true" size={16} />
       </button>
 
       {isOpen ? (
         <div className={styles.menu} id={listboxId} role="listbox">
-          {options.map((option) => (
+          {options.map((option, index) => (
             <button
               aria-label={option.label}
               aria-selected={option.value === value}
               className={option.value === value ? styles.optionSelected : undefined}
+              id={`${listboxId}-option-${index}`}
               key={option.value}
               onClick={() => choose(option)}
               role="option"

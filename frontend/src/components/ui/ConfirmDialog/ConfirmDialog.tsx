@@ -1,4 +1,4 @@
-import { useEffect, useId } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import styles from './ConfirmDialog.module.css'
 
@@ -23,16 +23,45 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const titleId = useId()
   const descriptionId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const firstFocusable = getFocusableElements(dialogRef.current).at(0)
+    firstFocusable?.focus()
+
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape' && !isConfirming) {
         onCancel()
+        return
+      }
+
+      if (event.key !== 'Tab') return
+
+      const focusableElements = getFocusableElements(dialogRef.current)
+      if (!focusableElements.length) {
+        event.preventDefault()
+        return
+      }
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements.at(-1)
+      if (!lastElement) return
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousActiveElement?.focus()
+    }
   }, [isConfirming, onCancel])
 
   return createPortal(
@@ -48,7 +77,7 @@ export function ConfirmDialog({
       }}
       role="dialog"
     >
-      <div className={styles.dialog}>
+      <div className={styles.dialog} ref={dialogRef}>
         <div>
           <h2 id={titleId}>{title}</h2>
           <p id={descriptionId}>{description}</p>
@@ -64,5 +93,14 @@ export function ConfirmDialog({
       </div>
     </div>,
     document.body,
+  )
+}
+
+function getFocusableElements(root: HTMLElement | null) {
+  if (!root) return []
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
   )
 }

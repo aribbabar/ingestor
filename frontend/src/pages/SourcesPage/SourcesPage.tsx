@@ -4,6 +4,13 @@ import { MessageLine } from '../../components/ui/MessageLine/MessageLine'
 import { PageHeading } from '../../components/ui/PageHeading/PageHeading'
 import { SelectControl } from '../../components/ui/SelectControl/SelectControl'
 import { classNames } from '../../utils/classNames'
+import {
+  isActiveJob,
+  isRecord,
+  isSourceQueryable,
+  sourceEmbeddingDisplayName,
+  sourceQueryDisabledMessage,
+} from '../../utils/sourceHelpers'
 import styles from './SourcesPage.module.css'
 
 type SourcesPageProps = {
@@ -75,7 +82,7 @@ export function SourcesPage({
         <div className={styles.panelHeader}>
           <div>
             <h2 id="registry-title">Registry</h2>
-            <p>{sources.length} source{sources.length === 1 ? '' : 's'}</p>
+            <p>{formatSourceCount(sources.length)}</p>
           </div>
           <button className={styles.secondaryButton} onClick={() => void onRefreshSources()} type="button">
             Refresh
@@ -201,7 +208,13 @@ export function SourcesPage({
           </div>
           <div className={styles.field}>
             <label htmlFor="search-mode">Mode</label>
-            <SelectControl id="search-mode" value={searchMode} options={searchModeOptions} onChange={onSearchModeChange} />
+            <SelectControl
+              id="search-mode"
+              accessibleLabel="Mode"
+              value={searchMode}
+              options={searchModeOptions}
+              onChange={onSearchModeChange}
+            />
           </div>
           <div className={styles.field}>
             <label htmlFor="limit">Limit</label>
@@ -289,18 +302,10 @@ function formatSnippet(snippet: string) {
   return normalized.length > 1200 ? `${normalized.slice(0, 1200).trim()}...` : normalized
 }
 
-function isSourceQueryable(source: SourceRecord | undefined, settings: SettingsResponse | null) {
-  if (!source || source.status !== 'indexed') return false
-  const embedding = source.metadata.embedding
-  if (!settings || !isRecord(embedding)) return false
-  return embedding.provider === settings.embedding.provider && embedding.model === settings.embedding.model
-}
-
 function sourceMetadata(source: SourceRecord) {
-  const embedding = isRecord(source.metadata.embedding) ? source.metadata.embedding : null
   const lastIndex = isRecord(source.metadata.last_index) ? source.metadata.last_index : null
   return {
-    embedding: stringValue(embedding?.display_name) ?? stringValue(embedding?.model),
+    embedding: sourceEmbeddingDisplayName(source),
     finishedAt: formatDateTime(stringValue(lastIndex?.finished_at)),
     duration: formatDuration(numberValue(lastIndex?.duration_seconds)),
     strategy: formatStrategy(lastIndex),
@@ -316,26 +321,10 @@ function sourceMetadataItems(metadata: ReturnType<typeof sourceMetadata>) {
   ].filter((item): item is { label: string; value: string } => Boolean(item.value))
 }
 
-function sourceQueryDisabledMessage(source: SourceRecord, settings: SettingsResponse | null) {
-  if (source.status !== 'indexed') {
-    return `${source.name} is ${source.status}. It must finish indexing before it can be searched.`
-  }
-  const current = settings?.embedding.display_name ?? 'the current embedding model'
-  const metadata = sourceMetadata(source)
-  if (!metadata.embedding) {
-    return `${source.name} must be re-indexed before searching because it has no embedding model metadata.`
-  }
-  return `${source.name} must be re-indexed before searching. It was indexed with ${metadata.embedding}, but the current embedding model is ${current}.`
-}
-
 function sourceCompatibilityLabel(source: SourceRecord, sourceQueryable: boolean) {
   if (sourceQueryable) return 'queryable'
   if (source.status === 'indexed') return 'reindex required'
   return source.status
-}
-
-function isActiveJob(job: IndexJob) {
-  return job.status === 'running' || job.status === 'cancelling'
 }
 
 function jobProgress(job: IndexJob) {
@@ -405,6 +394,6 @@ function numberValue(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+function formatSourceCount(count: number) {
+  return `${count} ${count === 1 ? 'source' : 'sources'}`
 }

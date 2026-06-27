@@ -13,6 +13,7 @@ import { Badge } from "../../components/ui/Badge/Badge";
 import { MessageLine } from "../../components/ui/MessageLine/MessageLine";
 import { PageHeading } from "../../components/ui/PageHeading/PageHeading";
 import { SelectControl } from "../../components/ui/SelectControl/SelectControl";
+import { isActiveJob } from "../../utils/sourceHelpers";
 import styles from "./CapturePage.module.css";
 
 type CapturePageProps = {
@@ -275,6 +276,7 @@ export function CapturePage({
                   <span className={styles.fieldLabel}>Scope</span>
                   <SelectControl
                     id="web-scope"
+                    accessibleLabel="Scope"
                     value={webForm.scope}
                     options={crawlScopeOptions}
                     onChange={(scope) => onWebFormChange({ ...webForm, scope })}
@@ -530,10 +532,6 @@ function JobProgress({ job }: { job: IndexJob }) {
       </span>
     </div>
   );
-}
-
-function isActiveJob(job: IndexJob) {
-  return job.status === "running" || job.status === "cancelling";
 }
 
 function jobProgress(job: IndexJob) {

@@ -145,6 +145,7 @@
 }
 
 .saveButton:disabled,
+.saveButton[data-disabled='true'],
 .secondaryButton:disabled {
   cursor: not-allowed;
   opacity: 0.48;

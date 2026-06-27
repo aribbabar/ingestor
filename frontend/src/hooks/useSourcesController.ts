@@ -9,6 +9,7 @@ import {
   startIndexJob,
 } from '../api'
 import type { IndexJob, Message, SearchMode, SearchResponse, SettingsResponse, SourceRecord, ViewName } from '../types'
+import { isActiveJob, isSourceQueryable, sourceQueryDisabledMessage } from '../utils/sourceHelpers'
 
 type AppMessage = Exclude<Message, null>
 
@@ -247,29 +248,4 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     sources,
     startIndexJobForSource,
   }
-}
-
-function isSourceQueryable(source: SourceRecord | undefined, settings: SettingsResponse | null) {
-  if (!source || source.status !== 'indexed') return false
-  const embedding = source.metadata.embedding
-  if (!settings || !isRecord(embedding)) return false
-  return embedding.provider === settings.embedding.provider && embedding.model === settings.embedding.model
-}
-
-function isActiveJob(job: IndexJob) {
-  return job.status === 'running' || job.status === 'cancelling'
-}
-
-function sourceQueryDisabledMessage(source: SourceRecord, settings: SettingsResponse | null) {
-  const current = settings?.embedding.display_name ?? 'the current embedding model'
-  const embedding = source.metadata.embedding
-  if (!isRecord(embedding)) {
-    return `${source.name} must be re-indexed before searching because it has no embedding model metadata.`
-  }
-  const indexedWith = typeof embedding.display_name === 'string' ? embedding.display_name : 'a different embedding model'
-  return `${source.name} must be re-indexed before searching. It was indexed with ${indexedWith}, but the current embedding model is ${current}.`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }

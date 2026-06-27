@@ -266,6 +266,11 @@ function App() {
     })
   }, [])
 
+  useEffect(() => {
+    if (apiStatus !== 'online' || activeView !== 'sources') return
+    void refreshSources()
+  }, [activeView, apiStatus, refreshSources])
+
   async function retryApiConnection() {
     setApiStatus('checking')
     setMessage(null)
