@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import shutil
 import threading
@@ -23,6 +24,8 @@ from app.domain.models import (
     SourceStatus,
     WebSourceRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def register_local_source(request: LocalSourceRequest) -> SourceRecord:
@@ -239,6 +242,7 @@ def _run_job(source_id: str, job: JobRecord) -> None:
     try:
         index_source(source_id, job)
     except Exception:
+        logger.exception("Index job %s failed for source %s", job.id, source_id)
         return
 
 

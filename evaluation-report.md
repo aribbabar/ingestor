@@ -20,6 +20,7 @@
 | Fixed | Dev-only desktop controls | Startup, PATH, and Updates controls are hidden outside the installed Tauri bridge. Verified in the running app. |
 | Fixed | `GET /api/sources/jobs` | Collection endpoint now returns jobs instead of `405`. Verified by live API probe. |
 | Not reproduced | Tauri backend binary mismatch | Current packaging builds `ingestor-daemon.exe` and `ingestor.exe`; `lib.rs` resolves `ingestor-daemon.exe` from bundled `binaries`. No code change needed unless a future installer build disproves this. |
+| Fixed | Background job exception logging | Worker-thread failures now emit traceback-bearing process logs in addition to job status/log updates. Covered by tests. |
 | Open | Cancel running jobs | Requires backend cancellation plumbing and cooperative indexing checks. |
 | Open | Progress estimates | Current UI shows counts but not total progress/ETA. |
 | Fixed | CSP tightening | `tauri.conf.json` now restricts default loading, Tauri IPC, local backend access, image sources, and local styles instead of disabling CSP entirely. |
@@ -27,6 +28,7 @@
 Verification for the latest remediation pass:
 
 - `backend\.venv\Scripts\python.exe -m pytest tests`
+- `backend\.venv\Scripts\python.exe -m compileall backend\app`
 - `npm --prefix frontend run build`
 - `npm --prefix frontend run tauri -- info`
 - JSON parse check for `frontend/src-tauri/tauri.conf.json`
@@ -71,7 +73,7 @@ Verification for the latest remediation pass:
 
 - **Fixed for same source.** Concurrent reindexing of the same folder is allowed. Starting a second index on `eval-test-frontend-src-tauri` while `test-src-tauri` was already running caused both jobs to run simultaneously. For large folders this can exhaust CPU/disk and create SQLite write contention.
 - **Fixed for exact local path duplicates.** No deduplication of identical snapshots. Two sources pointing to the same physical folder (`frontend/src-tauri`) create two independent snapshots and two independent indexes, doubling storage.
-- **Indexing thread is unbounded and not cancellable.** `_run_job` swallows all exceptions silently (`except Exception: return`), so failures are only visible in the job log/status field.
+- **Partially fixed.** Indexing thread is unbounded and not cancellable. `_run_job` now logs traceback-bearing failures to the process logger, but cancellation still requires backend cancellation plumbing and cooperative indexing checks.
 - **Backend SQLite writes happen per-document.** For a 1,500-file local snapshot this is acceptable on SSD, but for larger docs folders or web crawls it could become a bottleneck.
 
 ---
@@ -82,7 +84,7 @@ Verification for the latest remediation pass:
 - **TypeScript `API_BASE_URL` fallback chain is correct** (`window.ingestorDesktop?.backendUrl ?? import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8765'`), but the hard-coded default masks environment-specific setups.
 - **Fixed.** CSP is set to `null` in `tauri.conf.json`. This disables Content-Security Policy in the built app. It should be tightened before shipping, at minimum to `default-src 'self'; connect-src 'self' http://127.0.0.1:8765`.
 - **Backend `LocalSourceRequest` supports both `paths` and a legacy `path` field.** The API accepts `paths` while the model also exposes `path`. This should be deprecated or documented.
-- **`index_source` swallows exceptions in `_run_job`.** Errors should be propagated to the job log and optionally to Sentry or stderr for easier debugging.
+- **Fixed.** `index_source` failures caught by `_run_job` are now emitted through the process logger with a traceback, while the existing job log/status path remains intact.
 
 ---
 

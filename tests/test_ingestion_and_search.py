@@ -18,7 +18,7 @@ from app.indexing.discovery import iter_files
 from app.indexing.chunking import CHUNK_TARGET_CHARS, build_document, split_markdown_sections, split_section_content
 import app.sources.service as source_service
 from app.sources.service import ignore_snapshot_entries
-from app.domain.models import SearchMode, SourceKind, SourceRecord
+from app.domain.models import JobRecord, SearchMode, SourceKind, SourceRecord
 from app.retrieval.search import assemble_context, diversify_by_document, extract_code, rank_lookup, shape_result
 
 
@@ -436,6 +436,24 @@ class VectorIndexTests(TestCase):
                 self.assertEqual(test_db.find_running_job_for_source(source.id), running_job)
             finally:
                 test_db.engine.dispose()
+
+    def test_background_job_failure_is_logged_to_process_logger(self) -> None:
+        job = JobRecord(id="job-1", source_id="source-1")
+        original_index_source = source_service.index_source
+
+        def fail_index_source(source_id: str, current_job: JobRecord) -> None:
+            raise RuntimeError(f"boom for {source_id} and {current_job.id}")
+
+        try:
+            source_service.index_source = fail_index_source
+            with self.assertLogs("app.sources.service", level="ERROR") as logs:
+                source_service._run_job("source-1", job)
+        finally:
+            source_service.index_source = original_index_source
+
+        output = "\n".join(logs.output)
+        self.assertIn("Index job job-1 failed for source source-1", output)
+        self.assertIn("RuntimeError: boom for source-1 and job-1", output)
 
     def test_sqlite_vec_index_is_populated_during_ingestion(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
