@@ -197,7 +197,7 @@ fn cli_path_settings(app: &AppHandle) -> CliPathSettings {
             let in_path = user_path_contains(&cli_dir).unwrap_or(false);
             CliPathSettings {
                 supported: cfg!(windows) && cli_dir.exists(),
-                path: cli_dir.to_string_lossy().into_owned(),
+                path: path_for_user(&cli_dir),
                 in_path,
             }
         }
@@ -209,9 +209,34 @@ fn cli_path_settings(app: &AppHandle) -> CliPathSettings {
     }
 }
 
+fn path_for_user(path: &PathBuf) -> String {
+    let path = path.to_string_lossy();
+    strip_windows_verbatim_prefix(path.as_ref())
+}
+
+fn strip_windows_verbatim_prefix(path: &str) -> String {
+    if let Some(path) = path.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{path}");
+    }
+
+    if let Some(path) = path.strip_prefix(r"\??\UNC\") {
+        return format!(r"\\{path}");
+    }
+
+    if let Some(path) = path.strip_prefix(r"\\?\") {
+        return path.to_string();
+    }
+
+    if let Some(path) = path.strip_prefix(r"\??\") {
+        return path.to_string();
+    }
+
+    path.to_string()
+}
+
 fn normalize_path_entry(path: &str) -> String {
-    path.trim()
-        .trim_matches('"')
+    let path = path.trim().trim_matches('"');
+    strip_windows_verbatim_prefix(path)
         .trim_end_matches(['\\', '/'])
         .to_ascii_lowercase()
 }
@@ -258,6 +283,7 @@ fn user_path_contains(_path: &PathBuf) -> Result<bool, String> {
 
 #[cfg(windows)]
 fn add_to_user_path(path: &PathBuf) -> Result<(), String> {
+    let path = path_for_user(path);
     let script = r#"
 $cli = $env:INGESTOR_CLI_DIR
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -298,6 +324,45 @@ $result = [UIntPtr]::Zero
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_verbatim_drive_prefix_for_display() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(r"\\?\C:\Program Files\Ingestor\binaries"),
+            r"C:\Program Files\Ingestor\binaries"
+        );
+    }
+
+    #[test]
+    fn strips_verbatim_unc_prefix_for_display() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(r"\\?\UNC\server\share\Ingestor\binaries"),
+            r"\\server\share\Ingestor\binaries"
+        );
+    }
+
+    #[test]
+    fn path_list_contains_matches_verbatim_target_to_normal_entry() {
+        let target = PathBuf::from(r"\\?\C:\Program Files\Ingestor\binaries");
+        assert!(path_list_contains(
+            r"C:\Program Files\Ingestor\binaries",
+            &target
+        ));
+    }
+
+    #[test]
+    fn path_list_contains_ignores_quotes_case_and_trailing_slash() {
+        let target = PathBuf::from(r"C:\Program Files\Ingestor\binaries");
+        assert!(path_list_contains(
+            r#""c:\program files\ingestor\binaries\""#,
+            &target
+        ));
+    }
+}
+
 fn resolve_python(backend_dir: &PathBuf) -> PathBuf {
     if let Ok(path) = env::var("INGESTOR_PYTHON") {
         return PathBuf::from(path);
@@ -313,7 +378,11 @@ fn resolve_python(backend_dir: &PathBuf) -> PathBuf {
         return venv_python;
     }
 
-    PathBuf::from(if cfg!(windows) { "python.exe" } else { "python3" })
+    PathBuf::from(if cfg!(windows) {
+        "python.exe"
+    } else {
+        "python3"
+    })
 }
 
 fn start_backend(app: &AppHandle) -> Result<(), String> {
@@ -346,12 +415,7 @@ fn start_backend(app: &AppHandle) -> Result<(), String> {
     } else {
         let backend_executable = resolve_backend_executable(app)?;
         let mut command = Command::new(backend_executable);
-        command.args([
-            "--host",
-            BACKEND_HOST,
-            "--port",
-            &BACKEND_PORT.to_string(),
-        ]);
+        command.args(["--host", BACKEND_HOST, "--port", &BACKEND_PORT.to_string()]);
         command
     };
 
@@ -368,7 +432,10 @@ fn start_backend(app: &AppHandle) -> Result<(), String> {
     let child = command
         .spawn()
         .map_err(|error| format!("Could not start backend: {error}"))?;
-    *app.state::<BackendProcess>().0.lock().map_err(|error| error.to_string())? = Some(child);
+    *app.state::<BackendProcess>()
+        .0
+        .lock()
+        .map_err(|error| error.to_string())? = Some(child);
     wait_for_backend(Duration::from_secs(30))
 }
 
