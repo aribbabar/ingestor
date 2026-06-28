@@ -1,3 +1,11 @@
+"""Browser-dev fallback file picker endpoints.
+
+The installed desktop app should use the Tauri native dialog bridge. These
+tkinter-backed endpoints exist for browser-only development sessions and are
+deprecated because tkinter requires an interactive desktop session and is not
+appropriate for headless or service-style deployments.
+"""
+
 from tkinter import TclError, Tk, filedialog
 
 from fastapi import APIRouter, HTTPException, status
@@ -7,8 +15,14 @@ from app.domain.models import FilePickResponse, FolderPickResponse
 router = APIRouter(prefix="/folders", tags=["folders"])
 
 
-@router.post("/pick", response_model=FolderPickResponse)
+@router.post(
+    "/pick",
+    response_model=FolderPickResponse,
+    deprecated=True,
+    summary="Pick a folder (browser-dev fallback)",
+)
 def pick_folder() -> FolderPickResponse:
+    """Open a tkinter folder picker for browser-only development sessions."""
     root = None
     try:
         root = Tk()
@@ -18,7 +32,10 @@ def pick_folder() -> FolderPickResponse:
     except TclError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Native folder picker is unavailable in this session.",
+            detail=(
+                "The browser-dev folder picker fallback is unavailable because "
+                "tkinter cannot open a desktop dialog in this session."
+            ),
         ) from error
     finally:
         if root is not None:
@@ -26,8 +43,14 @@ def pick_folder() -> FolderPickResponse:
     return FolderPickResponse(path=selected_path or None)
 
 
-@router.post("/pick-files", response_model=FilePickResponse)
+@router.post(
+    "/pick-files",
+    response_model=FilePickResponse,
+    deprecated=True,
+    summary="Pick files (browser-dev fallback)",
+)
 def pick_files() -> FilePickResponse:
+    """Open a tkinter file picker for browser-only development sessions."""
     root = None
     try:
         root = Tk()
@@ -37,7 +60,10 @@ def pick_files() -> FilePickResponse:
     except TclError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Native file picker is unavailable in this session.",
+            detail=(
+                "The browser-dev file picker fallback is unavailable because "
+                "tkinter cannot open a desktop dialog in this session."
+            ),
         ) from error
     finally:
         if root is not None:

@@ -32,6 +32,7 @@ class Database:
         def set_sqlite_pragmas(dbapi_connection: sqlite3.Connection, _connection_record: object) -> None:
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys = ON")
+            # WAL lets UI/API reads continue while indexing writes documents and chunks.
             cursor.execute("PRAGMA journal_mode = WAL")
             cursor.close()
             vector_index.load(dbapi_connection)
@@ -40,6 +41,7 @@ class Database:
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
+        # Keep direct sqlite3 connections aligned with the SQLAlchemy engine.
         connection.execute("PRAGMA journal_mode = WAL")
         vector_index.load(connection)
         return connection

@@ -74,6 +74,11 @@ Log retention and API documentation fixes from this pass:
 - **USA-5:** Capture logs are now cached by job id and rehydrated from the selected source's latest job, so navigating between views or switching sources does not replace the visible log context with another job's logs.
 - **CODE-3:** The duplicate delete-source surface is now documented: `DELETE /api/sources/{source_id}` is the canonical CLI/REST endpoint, while `POST /api/sources/{source_id}/delete` is marked deprecated for desktop compatibility.
 
+Picker fallback and SQLite concurrency documentation fixes from this pass:
+
+- **PERF-4:** The tkinter-backed file picker API is now documented as a deprecated browser-dev fallback, with clearer 503 errors when tkinter cannot open a desktop dialog.
+- **PERF-6:** SQLite WAL mode is now documented at both connection setup points, making the read-during-indexing concurrency choice explicit.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -102,8 +107,11 @@ Verification run after the fixes:
 | Source inspection for `backend\app\api\routes.py` delete endpoints | Pass: DELETE is documented as canonical; POST compatibility route is deprecated |
 | Browser verification at `http://127.0.0.1:1420/#/capture` after navigating away and back | Pass: Capture progress/log context remained rendered after returning from Sources |
 | In-process FastAPI OpenAPI schema check | Pass: DELETE is documented as canonical; POST compatibility route is deprecated |
+| Source inspection for `backend\app\api\folders.py` picker fallback docs | Pass: tkinter routes are deprecated browser-dev fallbacks with clearer unavailable-environment errors |
+| In-process FastAPI OpenAPI schema check for picker fallback routes | Pass: folder and file picker routes are marked deprecated with browser-dev fallback summaries |
+| Source inspection for `backend\app\db\database.py` SQLite pragmas | Pass: WAL mode is documented for SQLAlchemy and direct sqlite3 connections |
 
-Still open from this report: USA-3, USA-4, USA-6, PERF-4 through PERF-6, and CODE-10.
+Still open from this report: USA-3, USA-4, USA-6, PERF-5, and CODE-10.
 
 ---
 
@@ -384,7 +392,7 @@ Native `<input type="number" min={1} max={50}>` automatically disables the down 
 2. **Headless / SSH.** `Tk()` requires a display. Already partly mitigated by the `TclError → 503` handler, but the error path returns "Native folder picker is unavailable" which is misleading — what is actually unavailable is *tkinter*, not the folder picker concept.
 3. **The Tauri shell already provides the right primitive.** `frontend/src/desktop.ts:20-42` uses `tauri-plugin-dialog`'s `open()`, which is what the app's "Add folder" / "Add files" buttons actually call (`App.tsx:322-380`). The HTTP `/folders/pick*` endpoints are only reachable when `window.ingestorDesktop` is undefined (browser access), which is an unsupported scenario.
 
-**Recommendation:** Either delete the `tkinter` endpoints entirely (the dev-mode browser fallback was probably never the intended use case), or mark them as `@deprecated` in OpenAPI and switch to a simpler `subprocess`-based native picker on each platform. At a minimum, add a top-of-file docstring warning about thread safety.
+**Follow-up:** Addressed by marking the endpoints deprecated in OpenAPI, documenting them as browser-dev fallbacks, and clarifying the 503 error when tkinter cannot open a desktop dialog.
 
 ---
 
@@ -396,7 +404,7 @@ Already noted as USA-3 from a UX angle; from a reliability angle the lack of a h
 
 ### PERF-6 — Single-threaded SQLite plus heavy writes during indexing  [Low]
 
-`db.connect()` returns a regular `sqlite3.Connection`. With WAL mode and the current `chunk_count` writes during indexing, concurrent reads from the polling endpoint should be fine, but the codebase does not document the isolation level or any read/write contention mitigations. No observed issue in this session, just a flag for future hardening.
+`db.connect()` returns a regular `sqlite3.Connection`. With WAL mode and the current `chunk_count` writes during indexing, concurrent reads from the polling endpoint should be fine. Follow-up: WAL mode is now documented at both connection setup points in `backend/app/db/database.py`.
 
 ---
 
@@ -511,7 +519,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | USA-3  | Web-crawl cancellation is co-operative only and may not return promptly                              | Inject cancellation token into the crawler; check before each fetch; expose a hard-kill that closes the underlying client.                                                                          |
 | PERF-1 | Fixed 1.5 s polling with no backoff; polling stops entirely after job end                            | Addressed: adaptive polling backs off after unchanged progress and keeps a short post-job refresh window.                                                                                           |
 | PERF-2 | `loadSettingsBundle` has no timeout; can stall the initial UI on a slow backend                      | Apply the 3500 ms timeout used for optional Ollama / skills loads.                                                                                                                                    |
-| PERF-4 | tkinter-based folder picker endpoints are thread-unsafe and headless-fragile                        | Document the limitation, or replace with a per-platform native invocation, or delete if browser-only access is not a supported use case.                                                            |
+| PERF-4 | tkinter-based folder picker endpoints are thread-unsafe and headless-fragile                        | Addressed: endpoints are deprecated browser-dev fallbacks with clearer unavailable-environment errors.                                                                                            |
 | CODE-1 | `jobProgress` / `formatEta` duplicated in CapturePage and SourcesPage                              | Extract to `frontend/src/utils/jobProgress.ts`.                                                                                                                                                       |
 | CODE-5 | No React Error Boundary wrapping the three routes                                                  | Add an Error Boundary component with a friendly message and a Reload button.                                                                                                                          |
 
@@ -532,7 +540,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | USA-7  | Status pill text is lowercase                                                                    | Render the title-case label and visually style the dot.                                                                                                         |
 | PERF-3 | `embed_text_with_local_hashing` returns zero vector for empty input                            | Addressed: tokenless queries now short-circuit in `vector_search`.                                                                                              |
 | PERF-5 | Web-crawl cancellation is co-operative only                                                      | See USA-3.                                                                                                                                                      |
-| PERF-6 | Single-threaded SQLite plus heavy writes during indexing                                       | Document the isolation level; consider WAL mode if not already enabled (verify in `database.py`).                                                              |
+| PERF-6 | Single-threaded SQLite plus heavy writes during indexing                                       | Addressed: WAL mode was verified and documented at both SQLite connection setup points.                                                                       |
 | CODE-2 | Dead `App.css` file                                                                             | Delete or migrate.                                                                                                                                              |
 | CODE-3 | Redundant DELETE / POST delete endpoints                                                        | Addressed: DELETE is documented as canonical for CLI/REST; POST compatibility endpoint is deprecated.                                                           |
 | CODE-4 | `onBackendStatus` race condition in `desktop.ts`                                                | Addressed: cancellation guard added.                                                                                                                           |

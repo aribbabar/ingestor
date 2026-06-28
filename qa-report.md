@@ -73,6 +73,11 @@ Log retention and API documentation fixes from this pass:
 - **USA-5 from the fresh QA report:** Capture logs are now cached by job id and rehydrated from the selected source's latest job, so navigating between views or switching sources does not replace the visible log context with another job's logs.
 - **CODE-4 / CODE-3 from the fresh QA report:** The duplicate delete-source surface is now documented: `DELETE /api/sources/{source_id}` is the canonical CLI/REST endpoint, while `POST /api/sources/{source_id}/delete` is marked deprecated for desktop compatibility.
 
+Picker fallback and SQLite concurrency documentation fixes from this pass:
+
+- **CODE-3:** The tkinter-backed file picker API is now documented as a deprecated browser-dev fallback, with clearer 503 errors when tkinter cannot open a desktop dialog.
+- **PERF-6 from the fresh QA report:** SQLite WAL mode is now documented at both connection setup points, making the read-during-indexing concurrency choice explicit.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -101,8 +106,11 @@ Verification run after the fixes:
 | Source inspection for `backend\app\api\routes.py` delete endpoints | Pass: DELETE is documented as canonical; POST compatibility route is deprecated |
 | Browser verification at `http://127.0.0.1:1420/#/capture` after navigating away and back | Pass: Capture progress/log context remained rendered after returning from Sources |
 | In-process FastAPI OpenAPI schema check | Pass: DELETE is documented as canonical; POST compatibility route is deprecated |
+| Source inspection for `backend\app\api\folders.py` picker fallback docs | Pass: tkinter routes are deprecated browser-dev fallbacks with clearer unavailable-environment errors |
+| In-process FastAPI OpenAPI schema check for picker fallback routes | Pass: folder and file picker routes are marked deprecated with browser-dev fallback summaries |
+| Source inspection for `backend\app\db\database.py` SQLite pragmas | Pass: WAL mode is documented for SQLAlchemy and direct sqlite3 connections |
 
-Still open from this report: the remaining lower-priority cleanup/performance items, excluding USA-5, PERF-1, PERF-2, PERF-3, CODE-3, CODE-7, and CODE-9 from the fresh report.
+Still open from this report: the remaining lower-priority cleanup/performance items, excluding old CODE-3, USA-5, PERF-1, PERF-2, PERF-3, PERF-6, CODE-3, CODE-7, and CODE-9 from the fresh report.
 
 ---
 
@@ -368,7 +376,7 @@ The file/folder picker endpoints use `tkinter` (`Tk()`, `filedialog`) to show na
 
 The Tauri desktop bridge (`desktop.ts`) already provides `pickFolder()` and `pickFiles()` via Tauri's native dialog plugin, which is the preferred path. The tkinter endpoints are a fallback for non-desktop (browser) access.
 
-**Recommendation:** Document the tkinter endpoints as browser-only fallbacks. Consider using a more robust dialog library or removing the endpoints if browser access is not a supported use case.
+**Recommendation:** Addressed by documenting the tkinter endpoints as deprecated browser-dev fallbacks and clarifying the 503 error when tkinter cannot open a desktop dialog.
 
 ---
 
@@ -467,7 +475,7 @@ return () => { cancelled = true; unlisten?.() }
 | PERF-1 | Fixed-interval polling with no backoff | Addressed: adaptive polling backs off after unchanged progress and keeps a short post-job refresh window |
 | PERF-2 | `loadSettingsBundle` blocks on slow endpoints | Add timeout or split requests |
 | CODE-1 | Duplicated `jobProgress`/`formatEta` functions | Extract to shared utility module |
-| CODE-3 | tkinter dependency in file picker | Document as browser-only fallback; consider alternatives |
+| CODE-3 | tkinter dependency in file picker | Addressed: documented as a deprecated browser-dev fallback with clearer unavailable-environment errors |
 | CODE-7 | `onBackendStatus` cleanup race condition | Addressed: cancellation guard added |
 
 ### Low
