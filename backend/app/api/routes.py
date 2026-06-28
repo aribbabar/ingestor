@@ -238,15 +238,26 @@ def search(request: SearchRequest) -> SearchResponse:
     )
 
 
-@router.delete("/sources/{source_id}", response_model=SourceDeletionResponse)
+@router.delete(
+    "/sources/{source_id}",
+    response_model=SourceDeletionResponse,
+    summary="Delete a source",
+)
 def delete_source(source_id: str) -> SourceDeletionResponse:
+    """Delete a source through the canonical REST endpoint used by the CLI."""
     deleted = delete_registered_source(source_id)
     if deleted is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
     return SourceDeletionResponse(deleted_source=deleted)
 
 
-@router.post("/sources/{source_id}/delete", response_model=SourceDeletionResponse)
+@router.post(
+    "/sources/{source_id}/delete",
+    response_model=SourceDeletionResponse,
+    deprecated=True,
+    summary="Delete a source (desktop compatibility)",
+)
 def delete_source_action(source_id: str) -> SourceDeletionResponse:
+    """Compatibility endpoint for clients that cannot issue DELETE requests."""
     return delete_source(source_id)
 

@@ -68,6 +68,11 @@ Polling and Capture search-state fixes from this pass:
 - **PERF-1:** Active job polling now adapts from the fast 1.5 second cadence to a slower 4.5 second cadence after repeated unchanged job progress, and keeps refreshing briefly after a selected job finishes.
 - **CODE-7 from the fresh QA report:** Capture now surfaces failed or stale sources that cannot be searched, with an Open Sources action instead of silently hiding them from the searchable list.
 
+Log retention and API documentation fixes from this pass:
+
+- **USA-5 from the fresh QA report:** Capture logs are now cached by job id and rehydrated from the selected source's latest job, so navigating between views or switching sources does not replace the visible log context with another job's logs.
+- **CODE-4 / CODE-3 from the fresh QA report:** The duplicate delete-source surface is now documented: `DELETE /api/sources/{source_id}` is the canonical CLI/REST endpoint, while `POST /api/sources/{source_id}/delete` is marked deprecated for desktop compatibility.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -92,8 +97,12 @@ Verification run after the fixes:
 | Browser verification at `http://localhost:1420/#/sources` | Pass: local-hashing search-quality notice rendered |
 | Source inspection for `frontend\src\hooks\useSourcesController.ts` | Pass: active job polling backs off after unchanged progress and keeps a short post-job refresh window |
 | Browser verification at `http://127.0.0.1:1420/#/capture` with a temporary failed source | Pass: Capture showed the blocked-source hint and Open Sources action; temporary QA source was removed |
+| Source inspection for `frontend\src\hooks\useSourcesController.ts` job log cache | Pass: logs are keyed by job id and active logs derive from the selected source's latest job |
+| Source inspection for `backend\app\api\routes.py` delete endpoints | Pass: DELETE is documented as canonical; POST compatibility route is deprecated |
+| Browser verification at `http://127.0.0.1:1420/#/capture` after navigating away and back | Pass: Capture progress/log context remained rendered after returning from Sources |
+| In-process FastAPI OpenAPI schema check | Pass: DELETE is documented as canonical; POST compatibility route is deprecated |
 
-Still open from this report: the remaining lower-priority cleanup/performance items, excluding PERF-1, PERF-2, PERF-3, CODE-7, and CODE-9 from the fresh report.
+Still open from this report: the remaining lower-priority cleanup/performance items, excluding USA-5, PERF-1, PERF-2, PERF-3, CODE-3, CODE-7, and CODE-9 from the fresh report.
 
 ---
 
@@ -367,9 +376,9 @@ The Tauri desktop bridge (`desktop.ts`) already provides `pickFolder()` and `pic
 
 **File:** `backend/app/api/routes.py:241-252`
 
-Both `DELETE /api/sources/{source_id}` and `POST /api/sources/{source_id}/delete` exist and call the same `delete_source()` function. The frontend uses the POST variant. The DELETE endpoint is unused by the frontend.
+Both `DELETE /api/sources/{source_id}` and `POST /api/sources/{source_id}/delete` exist and call the same `delete_source()` function. The frontend uses the POST variant, while the CLI uses the DELETE variant.
 
-**Recommendation:** Remove the redundant endpoint, or document it as a REST API convention for CLI use.
+**Recommendation:** Addressed by documenting DELETE as the canonical CLI/REST endpoint and marking the POST compatibility endpoint as deprecated.
 
 ---
 
@@ -472,7 +481,7 @@ return () => { cancelled = true; unlisten?.() }
 | USA-4 | No keyboard shortcut indication for search | Add hint text or Enter key affordance |
 | PERF-3 | Low vector score discrimination with local hashing | Addressed: notice added when local hashing is active |
 | CODE-2 | Dead CSS file `App.css` | Delete or migrate relevant styles |
-| CODE-4 | Redundant delete source endpoints | Remove unused DELETE endpoint |
+| CODE-4 | Redundant delete source endpoints | Addressed: DELETE is documented as canonical for CLI/REST; POST compatibility endpoint is deprecated |
 | CODE-5 | `sourcePendingDelete` not cleared on error | Review dialog lifecycle on error |
 
 ---

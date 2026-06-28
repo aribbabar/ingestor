@@ -69,6 +69,11 @@ Polling and Capture search-state fixes from this pass:
 - **PERF-1:** Active job polling now adapts from the fast 1.5 second cadence to a slower 4.5 second cadence after repeated unchanged job progress, and keeps refreshing briefly after a selected job finishes.
 - **CODE-7:** Capture now surfaces failed or stale sources that cannot be searched, with an Open Sources action instead of silently hiding them from the searchable list.
 
+Log retention and API documentation fixes from this pass:
+
+- **USA-5:** Capture logs are now cached by job id and rehydrated from the selected source's latest job, so navigating between views or switching sources does not replace the visible log context with another job's logs.
+- **CODE-3:** The duplicate delete-source surface is now documented: `DELETE /api/sources/{source_id}` is the canonical CLI/REST endpoint, while `POST /api/sources/{source_id}/delete` is marked deprecated for desktop compatibility.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -93,8 +98,12 @@ Verification run after the fixes:
 | Browser verification at `http://localhost:1420/#/sources` | Pass: local-hashing search-quality notice rendered |
 | Source inspection for `frontend\src\hooks\useSourcesController.ts` | Pass: active job polling backs off after unchanged progress and keeps a short post-job refresh window |
 | Browser verification at `http://127.0.0.1:1420/#/capture` with a temporary failed source | Pass: Capture showed the blocked-source hint and Open Sources action; temporary QA source was removed |
+| Source inspection for `frontend\src\hooks\useSourcesController.ts` job log cache | Pass: logs are keyed by job id and active logs derive from the selected source's latest job |
+| Source inspection for `backend\app\api\routes.py` delete endpoints | Pass: DELETE is documented as canonical; POST compatibility route is deprecated |
+| Browser verification at `http://127.0.0.1:1420/#/capture` after navigating away and back | Pass: Capture progress/log context remained rendered after returning from Sources |
+| In-process FastAPI OpenAPI schema check | Pass: DELETE is documented as canonical; POST compatibility route is deprecated |
 
-Still open from this report: USA-3 through USA-6, PERF-4 through PERF-6, and CODE-3 and CODE-10.
+Still open from this report: USA-3, USA-4, USA-6, PERF-4 through PERF-6, and CODE-10.
 
 ---
 
@@ -325,7 +334,7 @@ When no sources are indexed yet, the Capture page progress panel shows the small
 
 ### USA-5 — Capture page does not show logs or progress for the *currently selected* job if you navigate away  [Low]
 
-`activeLogs` in `useSourcesController.ts:25` is global but tied to the last refreshed job. Navigating between Capture and Sources loses the log context if the user is watching the wrong source's job.
+Follow-up: addressed by caching logs per job id in `useSourcesController.ts` and deriving visible `activeLogs` from the selected source's latest job. Navigating between Capture and Sources no longer relies on a single global log string from the last refreshed job.
 
 ---
 
@@ -407,7 +416,7 @@ Identical 30-line copies in `frontend/src/pages/SourcesPage/SourcesPage.tsx:330-
 
 ### CODE-3 — Redundant delete-source endpoints  [Low]
 
-`backend/app/api/routes.py:241-252` exposes both `DELETE /api/sources/{source_id}` and `POST /api/sources/{source_id}/delete` that call the same `delete_source()` function. The frontend (`api.ts:96-98`) only uses the POST variant. The DELETE variant is not used by the CLI either (`cli/main.py` doesn't expose a delete command). Either document it as a public REST convention or remove it.
+`backend/app/api/routes.py:241-252` exposes both `DELETE /api/sources/{source_id}` and `POST /api/sources/{source_id}/delete` that call the same `delete_source()` function. Follow-up inspection found the CLI uses the DELETE variant, so DELETE is now documented as the canonical CLI/REST endpoint and the POST route is marked deprecated for desktop compatibility.
 
 ---
 
@@ -518,15 +527,15 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | UX-9   | Recent sources don't deep-link to the matching job log                                          | Add a "View log" link or auto-navigate to Capture's progress section.                                                                                          |
 | USA-2  | No signal that on-disk files have changed since last index                                      | Compare mtimes; show a "Files changed — Reindex recommended" hint. Out of scope of this evaluation but worth tracking.                                          |
 | USA-4  | Capture page progress panel can show stale "Starting" state during transitions                 | Tighten `latestJob` selection or hide the panel when `selectedSource` is undefined.                                                                            |
-| USA-5  | Capture page log context lost when navigating away                                              | Persist `activeLogs` keyed by job id and rehydrate on revisit.                                                                                                  |
+| USA-5  | Capture page log context lost when navigating away                                              | Addressed: active logs are cached by job id and rehydrated for the selected source's latest job.                                                                 |
 | USA-6  | Spinner button states at min/max are subtle                                                     | No change required.                                                                                                                                              |
 | USA-7  | Status pill text is lowercase                                                                    | Render the title-case label and visually style the dot.                                                                                                         |
 | PERF-3 | `embed_text_with_local_hashing` returns zero vector for empty input                            | Addressed: tokenless queries now short-circuit in `vector_search`.                                                                                              |
 | PERF-5 | Web-crawl cancellation is co-operative only                                                      | See USA-3.                                                                                                                                                      |
 | PERF-6 | Single-threaded SQLite plus heavy writes during indexing                                       | Document the isolation level; consider WAL mode if not already enabled (verify in `database.py`).                                                              |
 | CODE-2 | Dead `App.css` file                                                                             | Delete or migrate.                                                                                                                                              |
-| CODE-3 | Redundant DELETE / POST delete endpoints                                                        | Remove the unused DELETE endpoint or document it.                                                                                                              |
-| CODE-4 | `onBackendStatus` race condition in `desktop.ts`                                                | Add a `cancelled` flag pattern.                                                                                                                                |
+| CODE-3 | Redundant DELETE / POST delete endpoints                                                        | Addressed: DELETE is documented as canonical for CLI/REST; POST compatibility endpoint is deprecated.                                                           |
+| CODE-4 | `onBackendStatus` race condition in `desktop.ts`                                                | Addressed: cancellation guard added.                                                                                                                           |
 | CODE-6 | `Number("")` unguarded in spinner onChange                                                      | See BUG-5.                                                                                                                                                      |
 | CODE-7 | Failed sources excluded from `searchableSources` with no error message                          | Addressed: Capture now shows failed or stale sources that cannot be searched, with an Open Sources action.                                                        |
 | CODE-8 | Reindex always reads the snapshot, never re-snapshots                                           | Detect mtime/hash differences and re-snapshot before indexing on Reindex.                                                                                      |

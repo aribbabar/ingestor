@@ -28,7 +28,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
   const [sources, setSources] = useState<SourceRecord[]>([])
   const [jobs, setJobs] = useState<IndexJob[]>([])
   const [selectedSourceId, setSelectedSourceId] = useState('')
-  const [activeLogs, setActiveLogs] = useState('')
+  const [jobLogsById, setJobLogsById] = useState<Record<string, string>>({})
   const [query, setQuery] = useState('')
   const [searchLimit, setSearchLimit] = useState(8)
   const [searchMode, setSearchMode] = useState<SearchMode>('hybrid')
@@ -64,6 +64,8 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     return jobs.find((job) => job.source_id === selectedSource.id)
   }, [jobs, selectedSource])
 
+  const activeLogs = latestJob ? jobLogsById[latestJob.id] ?? '' : ''
+
   const recentSources = sortedSources.slice(0, 5)
   const searchableSources = useMemo(
     () => sortedSources.filter((source) => isSourceQueryable(source, settings)),
@@ -94,7 +96,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     try {
       const payload = await loadJob(jobId)
       setJobs((current) => [payload.job, ...current.filter((job) => job.id !== payload.job.id)])
-      setActiveLogs(payload.logs)
+      setJobLogsById((current) => ({ ...current, [payload.job.id]: payload.logs }))
     } catch {
       return
     }
@@ -150,19 +152,17 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     const job = jobs.find((currentJob) => currentJob.source_id === sourceId)
     if (job) {
       void refreshJob(job.id)
-    } else {
-      setActiveLogs('')
     }
   }, [jobs, refreshJob])
 
   const selectCreatedSource = useCallback((sourceId: string) => {
     setSelectedSourceId(sourceId)
-    setActiveLogs('')
   }, [])
 
   const startIndexJobForSource = useCallback(async (sourceId: string) => {
     const payload = await startIndexJob(sourceId)
     setJobs((current) => [payload.job, ...current.filter((job) => job.id !== payload.job.id)])
+    setJobLogsById((current) => ({ ...current, [payload.job.id]: current[payload.job.id] ?? '' }))
     return payload.job
   }, [])
 
@@ -210,7 +210,6 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
         setSearchOutput(null)
         setHasSearched(false)
       }
-      setActiveLogs('')
       showMessage('sources', { text: `${source.name} is re-indexing`, tone: 'success' })
       await refreshSources()
       await refreshJob(job.id)
@@ -228,7 +227,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     try {
       const payload = await cancelIndexJob(job.id)
       setJobs((current) => [payload.job, ...current.filter((currentJob) => currentJob.id !== payload.job.id)])
-      setActiveLogs(payload.logs)
+      setJobLogsById((current) => ({ ...current, [payload.job.id]: payload.logs }))
       await refreshSources()
       showMessage(view, { text: 'Index cancellation requested', tone: 'success' })
     } catch (error) {
@@ -248,7 +247,13 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
       await deleteSourceRequest(sourceId)
       setSearchOutput(null)
       setHasSearched(false)
-      setActiveLogs('')
+      setJobLogsById((current) => {
+        const next = { ...current }
+        for (const job of jobs) {
+          if (job.source_id === sourceId) delete next[job.id]
+        }
+        return next
+      })
       await refreshSources()
       setSourcePendingDelete(null)
       showMessage('sources', { text: 'Source deleted', tone: 'success' })
@@ -260,7 +265,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     } finally {
       setDeletingSourceId(null)
     }
-  }, [refreshSources, showMessage, sourcePendingDelete])
+  }, [jobs, refreshSources, showMessage, sourcePendingDelete])
 
   return {
     activeLogs,
