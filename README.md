@@ -4,7 +4,7 @@ Ingestor is a local documentation ingestion and retrieval app for developers and
 
 [Download for Windows](https://github.com/aribbabar/ingestor/releases/latest)
 
-The Windows installer is published through GitHub Releases. Install the latest setup `.exe`, open Ingestor, and the app will start its local daemon automatically.
+The Windows installer is published through GitHub Releases. Install the latest Windows installer, open Ingestor, and the app will start its local daemon automatically.
 
 ## What It Does
 
@@ -132,24 +132,68 @@ Then call it from the CLI:
 .\.venv\Scripts\python.exe -m app.cli search all "query" --output json
 ```
 
-## Build The Installer
+## Build And Publish The Installer
 
-Build the Windows installer:
-
-```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY="$env:USERPROFILE\.tauri\ingestor.key"
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
-npm --prefix frontend run tauri -- build
-```
-
-The release build creates a signed Windows MSI installer and updater signature that contain the React frontend, `ingestor-daemon.exe`, the `ingestor` CLI, and app-owned skills:
+Tauri updater builds must be signed. Generate the updater signing key once before the first public release:
 
 ```powershell
-frontend\src-tauri\target\release\bundle\msi\Ingestor_0.1.0_x64_en-US.msi
-frontend\src-tauri\target\release\bundle\msi\Ingestor_0.1.0_x64_en-US.msi.sig
+npm run release:setup-updater
 ```
 
-Publish the MSI, `.sig`, and a `latest.json` update manifest to GitHub Releases so the Settings update check can find new versions.
+The setup command creates or reuses `%USERPROFILE%\.tauri\ingestor.key`, reads the matching `.pub` file, writes `plugins.updater.pubkey` in `frontend\src-tauri\tauri.conf.json`, and creates an ignored local `.env.release` file with the private key path and password. Keep the private key file and password private. If the private key is lost, already-installed apps cannot verify future updates signed with a different key.
+
+If you need to intentionally replace the key before the first public release, run:
+
+```powershell
+npm run release:setup-updater -- --force
+```
+
+Build the signed update bundle with one command:
+
+```powershell
+npm run release:build-update
+```
+
+The release build creates a signed Windows MSI installer and updater signature that contain the React frontend, `ingestor-daemon.exe`, the `ingestor` CLI, and app-owned skills. The release wrapper also writes a GitHub updater manifest:
+
+```powershell
+release\v0.1.0\Ingestor_0.1.0_x64_en-US.msi
+release\v0.1.0\Ingestor_0.1.0_x64_en-US.msi.sig
+release\v0.1.0\latest.json
+```
+
+Before each release, bump the app version in `frontend\src-tauri\tauri.conf.json`. Keep the matching version values in `frontend\package.json`, `frontend\src-tauri\Cargo.toml`, and `backend\pyproject.toml` aligned when the desktop app, bundled CLI, and Python package are released together.
+
+Publish the MSI, `.sig`, and a `latest.json` update manifest to the GitHub Release. The app checks this endpoint:
+
+```text
+https://github.com/aribbabar/ingestor/releases/latest/download/latest.json
+```
+
+Use the contents of the generated `.sig` file as the `signature` value. The signature must be the file contents, not a path or URL:
+
+```json
+{
+  "version": "0.1.1",
+  "notes": "Release notes for this version.",
+  "pub_date": "2026-06-28T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "contents of Ingestor_0.1.1_x64_en-US.msi.sig",
+      "url": "https://github.com/aribbabar/ingestor/releases/download/v0.1.1/Ingestor_0.1.1_x64_en-US.msi"
+    }
+  }
+}
+```
+
+Release flow:
+
+1. Run the verification checks below.
+2. Bump versions and commit the release.
+3. Build with `npm run release:build-update`.
+4. Create a GitHub Release, for example `v0.1.1`.
+5. Upload the MSI, matching `.sig`, and `latest.json`.
+6. Install the previous release, open Settings, check for updates, and verify that the new release installs.
 
 ## Project Layout
 

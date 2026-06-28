@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "npm --prefix frontend run tauri -- dev",
     "build": "npm --prefix frontend run tauri -- build",
+    "release:setup-updater": "node scripts/setup-tauri-updater.mjs",
+    "release:build-update": "node scripts/build-tauri-update.mjs",
     "frontend:dev": "npm --prefix frontend run dev -- --host 127.0.0.1 --port 1420 --strictPort",
     "frontend:build": "npm --prefix frontend run build",
     "backend:serve": "backend\\.venv\\Scripts\\python.exe -m app.daemon --host 127.0.0.1 --port 8765 --reload"

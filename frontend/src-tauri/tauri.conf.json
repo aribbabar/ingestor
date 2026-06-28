@@ -26,7 +26,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi"],
+    "targets": [
+      "msi"
+    ],
     "createUpdaterArtifacts": true,
     "resources": {
       "binaries": "binaries",
@@ -53,7 +55,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU0NzlGNDkyMUI3MEQyOTQKUldTVTBuQWJrdlI1NUd6Mnpjai9sZGd6RGdlc1Z2YUYzeFdLNXFaaGwvU0pYaG94ZGhkaXhGWDIK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0NDg5NDU1NEY3OUNGNjcKUldSbnozbFBWWlJJaEhEelkvQ2l3RWphcURUcmZ4MHB6K25yQUZ0dTZyY0cwL213cmNWeTJvZ0UK",
       "endpoints": [
         "https://github.com/aribbabar/ingestor/releases/latest/download/latest.json"
       ],
