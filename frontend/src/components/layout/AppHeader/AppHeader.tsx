@@ -11,6 +11,8 @@ const navItems: ViewName[] = ['capture', 'sources', 'settings']
 const logoSrc = `${import.meta.env.BASE_URL}logo.svg`
 
 export function AppHeader({ activeView, apiStatus }: AppHeaderProps) {
+  const statusLabel = titleCase(apiStatus)
+
   return (
     <header className={styles.topbar}>
       <NavLink className={styles.brand} to="/capture">
@@ -33,7 +35,9 @@ export function AppHeader({ activeView, apiStatus }: AppHeaderProps) {
         ))}
       </nav>
 
-      <div className={`${styles.statusPill} ${styles[apiStatus]}`}>{apiStatus}</div>
+      <div className={`${styles.statusPill} ${styles[apiStatus]}`} role="status">
+        {statusLabel}
+      </div>
     </header>
   )
 }

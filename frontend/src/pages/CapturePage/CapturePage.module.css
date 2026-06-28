@@ -404,6 +404,13 @@
   width: 100%;
 }
 
+.sourceItem:hover,
+.sourceItem:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--focus-ring-size) var(--accent-soft);
+  outline: none;
+}
+
 .sourceMeta {
   display: grid;
   gap: var(--space-1);
@@ -421,6 +428,17 @@
   font-size: var(--font-size-xs);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourceAction {
+  align-items: center;
+  color: var(--accent);
+  display: inline-flex;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  gap: var(--space-2);
+  justify-self: end;
   white-space: nowrap;
 }
 

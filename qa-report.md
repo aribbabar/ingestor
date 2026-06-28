@@ -48,6 +48,11 @@ Source-list polish fixes from this pass:
 
 - **UX-8 from the fresh QA report:** Source names and paths now ellipsize within the source selector, and focused source rows show a clear accent focus ring.
 
+Header and recent-source fixes from this pass:
+
+- **USA-7 from the fresh QA report:** The backend status pill now renders capitalized status text, so assistive output reports `Online`, `Checking`, or `Offline` instead of lowercase raw state.
+- **UX-9 from the fresh QA report:** Recent source rows now expose an explicit `Open {source.name} in Sources` action with a visible Open affordance.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -64,6 +69,7 @@ Verification run after the fixes:
 | Browser verification at `http://127.0.0.1:1420/#/sources` search states | Pass: initial "No search has been run yet" and completed "No matching results" states verified |
 | Browser verification at `http://127.0.0.1:1420/#/capture` web tab | Pass: Index website action appears before expanded Advanced crawl options and the advanced fields remain visible below it |
 | Browser verification at `http://127.0.0.1:1420/#/sources` at 980px viewport | Pass: source location uses hidden overflow/ellipsis/nowrap and focused source row shows an accent focus ring |
+| Browser verification at `http://127.0.0.1:1420/#/capture` recent sources | Pass: header status is exposed as `Online`; Recent source action reads `Open test-docs in Sources` and navigates to the selected source on `/sources` |
 
 Still open from this report: UX-4 and the remaining lower-priority cleanup/performance items.
 

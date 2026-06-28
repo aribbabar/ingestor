@@ -8,6 +8,7 @@ import type {
   ViewName,
   WebForm
 } from "../../types";
+import { ArrowRight } from "lucide-react";
 import { ModeTabs } from "../../components/source/ModeTabs/ModeTabs";
 import { Badge } from "../../components/ui/Badge/Badge";
 import { MessageLine } from "../../components/ui/MessageLine/MessageLine";
@@ -481,6 +482,7 @@ export function CapturePage({
           {recentSources.length ? (
             recentSources.map((source) => (
               <button
+                aria-label={`Open ${source.name} in Sources`}
                 className={styles.sourceItem}
                 key={source.id}
                 onClick={() => openSource(source.id)}
@@ -492,6 +494,10 @@ export function CapturePage({
                 </span>
                 <Badge value={source.kind} variant={source.kind} />
                 <Badge value={source.status} variant={source.status} />
+                <span className={styles.sourceAction} aria-hidden="true">
+                  Open
+                  <ArrowRight size={14} strokeWidth={2.4} />
+                </span>
               </button>
             ))
           ) : (
