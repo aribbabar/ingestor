@@ -8,7 +8,6 @@ import type {
   ViewName,
   WebForm
 } from "../../types";
-import { ArrowRight } from "lucide-react";
 import { ModeTabs } from "../../components/source/ModeTabs/ModeTabs";
 import { Badge } from "../../components/ui/Badge/Badge";
 import { MessageLine } from "../../components/ui/MessageLine/MessageLine";
@@ -25,10 +24,11 @@ type CapturePageProps = {
   mode: SourceMode;
   message: Message;
   recentSources: SourceRecord[];
-  blockedSearchSources: SourceRecord[];
-  searchableSources: SourceRecord[];
   localForm: LocalForm;
   webForm: WebForm;
+  totalSourceCount: number;
+  isDraggingLocalPaths: boolean;
+  isLocalPathDropAvailable: boolean;
   isPickingFiles: boolean;
   isPickingFolder: boolean;
   isSubmitting: boolean;
@@ -43,7 +43,6 @@ type CapturePageProps = {
   onResetWebOptions: () => void;
   onNavigate: (view: ViewName) => void;
   onSelectSource: (sourceId: string) => void;
-  onSearchSource: (sourceId?: string) => void;
   onCancelJob: (job: IndexJob) => void;
 };
 
@@ -76,10 +75,11 @@ export function CapturePage({
   mode,
   message,
   recentSources,
-  blockedSearchSources,
-  searchableSources,
   localForm,
   webForm,
+  totalSourceCount,
+  isDraggingLocalPaths,
+  isLocalPathDropAvailable,
   isPickingFiles,
   isPickingFolder,
   isSubmitting,
@@ -94,7 +94,6 @@ export function CapturePage({
   onResetWebOptions,
   onNavigate,
   onSelectSource,
-  onSearchSource,
   onCancelJob
 }: CapturePageProps) {
   const isLocal = mode === "local";
@@ -109,8 +108,6 @@ export function CapturePage({
   const selectedChunkCountLabel = selectedSource
     ? `${selectedSource.chunk_count} chunks`
     : "";
-  const blockedSearchSource = blockedSearchSources[0];
-  const canOpenSearchPanel = Boolean(searchableSources.length || blockedSearchSource);
 
   function openSource(sourceId: string) {
     onSelectSource(sourceId);
@@ -133,7 +130,7 @@ export function CapturePage({
 
         {isLocal ? (
           <form onSubmit={onRegisterLocal}>
-            <div className={styles.selectionBlock}>
+            <div className={styles.selectionBlock} data-dragging={isDraggingLocalPaths || undefined}>
               <div className={styles.selectionHeader}>
                 <div>
                   <h3>Selected paths</h3>
@@ -178,6 +175,17 @@ export function CapturePage({
                   No folders or files selected.
                 </div>
               )}
+              <div className={styles.dropZone} data-enabled={isLocalPathDropAvailable || undefined}>
+                <strong>Drop folders or files here</strong>
+                <span>
+                  {isLocalPathDropAvailable
+                    ? "They will be added to the selected paths above."
+                    : "Drag and drop is available in the desktop app."}
+                </span>
+              </div>
+              {isDraggingLocalPaths ? (
+                <div className={styles.dropOverlay}>Release to add paths.</div>
+              ) : null}
             </div>
             <div className={styles.field}>
               <label htmlFor="local-source-name">Name</label>
@@ -445,59 +453,12 @@ export function CapturePage({
         )}
       </section>
 
-      <section className={styles.searchPanel} aria-labelledby="capture-search-title">
-        <div className={styles.sectionHeading}>
-          <div>
-            <h2 id="capture-search-title">Search indexed sources</h2>
-            <p>{formatReadySourceCount(searchableSources.length)}</p>
-          </div>
-          <button
-            className={styles.linkButton}
-            disabled={!canOpenSearchPanel}
-            onClick={() => onSearchSource(searchableSources.length ? undefined : blockedSearchSource?.id)}
-            type="button"
-          >
-            {searchableSources.length ? "Open search" : "Review source"}
-          </button>
-        </div>
-        {searchableSources.length ? (
-          <>
-            <div className={styles.searchSourceList}>
-              {searchableSources.slice(0, 3).map((source) => (
-                <button
-                  className={styles.searchSourceItem}
-                  key={source.id}
-                  onClick={() => onSearchSource(source.id)}
-                  type="button"
-                >
-                  <span>
-                    <strong>{source.name}</strong>
-                    <small>{formatSourceSize(source)}</small>
-                  </span>
-                  <Badge value={source.kind} variant={source.kind} />
-                </button>
-              ))}
-            </div>
-            {blockedSearchSources.length ? (
-              <BlockedSearchNotice
-                sources={blockedSearchSources}
-                onOpenSource={onSearchSource}
-              />
-            ) : null}
-          </>
-        ) : blockedSearchSources.length ? (
-          <BlockedSearchNotice
-            sources={blockedSearchSources}
-            onOpenSource={onSearchSource}
-          />
-        ) : (
-          <div className={styles.emptyState}>Indexed sources appear here when they are ready to search.</div>
-        )}
-      </section>
-
       <section className={styles.recentPanel} aria-labelledby="recent-title">
         <div className={styles.sectionHeading}>
-          <h2 id="recent-title">Recent sources</h2>
+          <div>
+            <h2 id="recent-title">Recent sources</h2>
+            <p>{formatRecentSourceCount(recentSources.length, totalSourceCount)}</p>
+          </div>
           <button
             className={styles.linkButton}
             onClick={() => onNavigate("sources")}
@@ -522,10 +483,6 @@ export function CapturePage({
                 </span>
                 <Badge value={source.kind} variant={source.kind} />
                 <Badge value={source.status} variant={source.status} />
-                <span className={styles.sourceAction} aria-hidden="true">
-                  Open
-                  <ArrowRight size={14} strokeWidth={2.4} />
-                </span>
               </button>
             ))
           ) : (
@@ -539,57 +496,37 @@ export function CapturePage({
   );
 }
 
-function BlockedSearchNotice({
-  sources,
-  onOpenSource
-}: {
-  sources: SourceRecord[];
-  onOpenSource: (sourceId?: string) => void;
-}) {
-  const source = sources[0];
-  return (
-    <div className={styles.attentionState}>
-      <span>{formatBlockedSearchSummary(sources)}</span>
-      {source ? (
-        <button
-          className={styles.linkButton}
-          onClick={() => onOpenSource(source.id)}
-          type="button"
-        >
-          Open Sources
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 function latestLogLine(logs: string) {
   return latestLogLines(logs, 1).at(0);
 }
 
-function formatReadySourceCount(count: number) {
-  if (!count) return "No indexed sources ready";
-  return `${count} ${count === 1 ? "source" : "sources"} ready`;
-}
-
-function formatSourceSize(source: SourceRecord) {
-  return `${source.document_count} docs, ${source.chunk_count} chunks`;
-}
-
-function formatBlockedSearchSummary(sources: SourceRecord[]) {
-  const [source] = sources;
-  if (!source) return "";
-  if (sources.length > 1) {
-    return `${sources.length} sources need reindexing or repair before search.`;
-  }
-  if (source.status === "failed") {
-    return `${source.name} failed indexing and cannot be searched yet.`;
-  }
-  return `${source.name} must be re-indexed before search.`;
+function formatRecentSourceCount(count: number, total: number) {
+  if (!count) return "No recent sources";
+  const shown = `Showing ${count} recent ${count === 1 ? "source" : "sources"}`;
+  if (total > count) return `${shown} of ${total}`;
+  return shown;
 }
 
 function JobProgress({ job }: { job: IndexJob }) {
   const progress = jobProgress(job);
+  if (progress.percent === null) {
+    return (
+      <div className={styles.jobProgress}>
+        <div
+          className={styles.progressTrack}
+          data-indeterminate="true"
+          role="progressbar"
+          aria-valuetext={progress.label}
+        >
+          <span />
+        </div>
+        <span>
+          {progress.label}
+          {progress.eta ? ` - ${progress.eta}` : ""}
+        </span>
+      </div>
+    );
+  }
   return (
     <div className={styles.jobProgress}>
       <div

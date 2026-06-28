@@ -26,11 +26,13 @@ type SettingsPageProps = {
   ollamaModels: OllamaModelsResponse | null
   isDesktopAvailable: boolean
   isSavingSettings: boolean
+  isRefreshingSettings: boolean
   isSyncingSkills: boolean
   isSavingStartup: boolean
   isAddingCliPath: boolean
   isCheckingUpdate: boolean
   isInstallingUpdate: boolean
+  onRefreshSettings: () => Promise<void>
   onSaveSettings: (request: SettingsSaveRequest) => Promise<SettingsResponse | null>
   onSyncSkills: (targetIds?: string[]) => Promise<void>
   onSetStartupEnabled: (enabled: boolean) => Promise<void>
@@ -74,11 +76,13 @@ export function SettingsPage({
   ollamaModels,
   isDesktopAvailable,
   isSavingSettings,
+  isRefreshingSettings,
   isSyncingSkills,
   isSavingStartup,
   isAddingCliPath,
   isCheckingUpdate,
   isInstallingUpdate,
+  onRefreshSettings,
   onSaveSettings,
   onSyncSkills,
   onSetStartupEnabled,
@@ -149,6 +153,7 @@ export function SettingsPage({
   const staleSourceWarningText = `${formatIndexedSourceCount(staleSourceCount)} must be re-indexed before search.`
   const effectiveBatchSizeText = `Effective batch size: ${effectiveBatchSizeLabel}. Default: ${defaultIndexingStrategy} / ${defaultBatchSize}.`
   const batchSizeErrorText = `Batch size must be a whole number from ${MIN_BATCH_SIZE} to ${MAX_BATCH_SIZE}.`
+  const cliPathStatus = formatCliPathStatus(cliPathSettings)
 
   function resetDraftToDefaults() {
     setIsResetPending(true)
@@ -198,26 +203,86 @@ export function SettingsPage({
     <main>
       <PageHeading title="Settings" text="Configure the defaults used for new indexes and search." />
 
+      {isDesktopAvailable ? (
+        <section className={styles.settingsPanel} aria-label="App updates">
+          <div className={styles.panelHeader}>
+            <div className={styles.panelTitle}>
+              <h2>Updates</h2>
+              <p>Check for signed Ingestor releases.</p>
+            </div>
+            <button
+              className={styles.secondaryButton}
+              disabled={isCheckingUpdate || isInstallingUpdate}
+              type="button"
+              onClick={() => void onCheckForUpdates()}
+            >
+              {isCheckingUpdate ? 'Checking...' : 'Check'}
+            </button>
+          </div>
+
+          <div className={styles.updateRows}>
+            {updateStatus?.available ? (
+              <div className={styles.updateAvailable}>
+                <div>
+                  <strong>Version {updateStatus.version} is available</strong>
+                  <p>
+                    Current version: {updateStatus.currentVersion}
+                    {updateStatus.date ? ` - Published ${updateStatus.date}` : ''}
+                  </p>
+                  {updateStatus.body ? <p>{updateStatus.body}</p> : null}
+                </div>
+                <button
+                  className={styles.saveButton}
+                  disabled={isInstallingUpdate}
+                  type="button"
+                  onClick={() => void onInstallUpdate()}
+                >
+                  {isInstallingUpdate ? 'Installing...' : 'Install update'}
+                </button>
+              </div>
+            ) : updateStatus ? (
+              <p className={styles.rowNote}>Ingestor is up to date.</p>
+            ) : (
+              <p className={styles.rowNote}>No update check has run in this session.</p>
+            )}
+          </div>
+        </section>
+      ) : null}
+
       <section className={styles.settingsPanel} aria-label="Settings defaults">
         <div className={styles.panelHeader}>
-          <button
-            className={styles.secondaryButton}
-            disabled={!settings || isSavingSettings}
-            type="button"
-            onClick={resetDraftToDefaults}
-          >
-            Reset
-          </button>
-          <button
-            className={styles.saveButton}
-            aria-disabled={isSaveUnavailable}
-            data-disabled={isSaveUnavailable || undefined}
-            disabled={isSaveUnavailable}
-            type="button"
-            onClick={requestSaveSettings}
-          >
-            {isSavingSettings ? 'Saving...' : 'Save'}
-          </button>
+          <div className={styles.panelTitle}>
+            <h2>Defaults</h2>
+            <p>Embedding, indexing, and retrieval settings for new indexes.</p>
+          </div>
+          <div className={styles.panelActions}>
+            <button
+              className={styles.secondaryButton}
+              disabled={!settings || isSavingSettings || isRefreshingSettings}
+              type="button"
+              onClick={resetDraftToDefaults}
+            >
+              Reset
+            </button>
+            <button
+              className={styles.secondaryButton}
+              disabled={isRefreshingSettings || isSavingSettings}
+              type="button"
+              onClick={() => void onRefreshSettings()}
+            >
+              {isRefreshingSettings ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <button
+              className={styles.saveButton}
+              aria-disabled={isSaveUnavailable}
+              data-disabled={isSaveUnavailable || undefined}
+              disabled={isSaveUnavailable}
+              type="button"
+              onClick={requestSaveSettings}
+            >
+              {isSavingSettings ? 'Saving...' : 'Save'}
+            </button>
+          </div>
         </div>
 
         {isResetPending ? (
@@ -335,10 +400,15 @@ export function SettingsPage({
               <div className={styles.cliPathBlock}>
                 <div className={styles.cliPathHeader}>
                   <div>
-                    <h3>Command line access</h3>
+                    <div className={styles.inlineTitle}>
+                      <h3>Command line access</h3>
+                      <span className={styles.cliPathStatus} data-state={cliPathStatus.state}>
+                        {cliPathStatus.label}
+                      </span>
+                    </div>
                     <p>
                       {cliPathSettings?.inPath
-                        ? 'The Ingestor CLI folder is already on your user PATH.'
+                        ? 'The provided Ingestor CLI folder is already on PATH.'
                         : 'Add the Ingestor CLI folder to your user PATH or copy the folder path for manual setup.'}
                     </p>
                   </div>
@@ -377,49 +447,6 @@ export function SettingsPage({
             </div>
           </section>
 
-          <section className={styles.settingsPanel} aria-label="App updates">
-            <div className={styles.panelHeader}>
-              <div className={styles.panelTitle}>
-                <h2>Updates</h2>
-                <p>Check for signed Ingestor releases.</p>
-              </div>
-              <button
-                className={styles.secondaryButton}
-                disabled={isCheckingUpdate || isInstallingUpdate}
-                type="button"
-                onClick={() => void onCheckForUpdates()}
-              >
-                {isCheckingUpdate ? 'Checking...' : 'Check'}
-              </button>
-            </div>
-
-            <div className={styles.updateRows}>
-              {updateStatus?.available ? (
-                <div className={styles.updateAvailable}>
-                  <div>
-                    <strong>Version {updateStatus.version} is available</strong>
-                    <p>
-                      Current version: {updateStatus.currentVersion}
-                      {updateStatus.date ? ` - Published ${updateStatus.date}` : ''}
-                    </p>
-                    {updateStatus.body ? <p>{updateStatus.body}</p> : null}
-                  </div>
-                  <button
-                    className={styles.saveButton}
-                    disabled={isInstallingUpdate}
-                    type="button"
-                    onClick={() => void onInstallUpdate()}
-                  >
-                    {isInstallingUpdate ? 'Installing...' : 'Install update'}
-                  </button>
-                </div>
-              ) : updateStatus ? (
-                <p className={styles.rowNote}>Ingestor is up to date.</p>
-              ) : (
-                <p className={styles.rowNote}>No update check has run in this session.</p>
-              )}
-            </div>
-          </section>
         </>
       ) : null}
 
@@ -429,14 +456,24 @@ export function SettingsPage({
             <h2>Agent Skills</h2>
             <p>Install or refresh Ingestor skills in the supported agent folders.</p>
           </div>
-          <button
-            className={styles.saveButton}
-            disabled={!skillTargets?.targets.length || isSyncingSkills}
-            type="button"
-            onClick={() => void onSyncSkills()}
-          >
-            {isSyncingSkills ? 'Updating...' : 'Update all'}
-          </button>
+          <div className={styles.panelActions}>
+            <button
+              className={styles.secondaryButton}
+              disabled={isRefreshingSettings || isSyncingSkills}
+              type="button"
+              onClick={() => void onRefreshSettings()}
+            >
+              {isRefreshingSettings ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <button
+              className={styles.saveButton}
+              disabled={!skillTargets?.targets.length || isSyncingSkills}
+              type="button"
+              onClick={() => void onSyncSkills()}
+            >
+              {isSyncingSkills ? 'Updating...' : 'Update all'}
+            </button>
+          </div>
         </div>
 
         <div className={styles.skillTargets}>
@@ -502,4 +539,10 @@ function resetConfirmDescription(staleSourceCount: number) {
 
 function formatIndexedSourceCount(count: number) {
   return `${count} indexed source${count === 1 ? '' : 's'}`
+}
+
+function formatCliPathStatus(settings: CliPathSettings | null) {
+  if (settings?.inPath) return { state: 'ready', label: 'In PATH' }
+  if (settings?.supported) return { state: 'missing', label: 'Not in PATH' }
+  return { state: 'unavailable', label: 'Unavailable' }
 }

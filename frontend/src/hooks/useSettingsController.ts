@@ -41,6 +41,7 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
   const [isSyncingSkills, setIsSyncingSkills] = useState(false)
   const [isSavingStartup, setIsSavingStartup] = useState(false)
   const [isAddingCliPath, setIsAddingCliPath] = useState(false)
+  const [isRefreshingSettings, setIsRefreshingSettings] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false)
 
@@ -90,6 +91,30 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
     }
     setCliPathSettings(await window.ingestorDesktop.getCliPathSettings())
   }, [])
+
+  const refreshSettingsData = useCallback(async () => {
+    setIsRefreshingSettings(true)
+    try {
+      const { settings: settingsPayload } = await loadSettingsBundle()
+      setSettings(settingsPayload)
+      await Promise.allSettled([
+        refreshOllamaModels(),
+        refreshSkillTargets(),
+        refreshStartupSettings(),
+        refreshCliPathSettings(),
+      ])
+      showMessage('settings', { text: 'Settings refreshed', tone: 'success' })
+      return settingsPayload
+    } catch (error) {
+      showMessage('settings', {
+        text: error instanceof Error ? error.message : 'Unable to refresh settings',
+        tone: 'error',
+      })
+      return null
+    } finally {
+      setIsRefreshingSettings(false)
+    }
+  }, [refreshCliPathSettings, refreshOllamaModels, refreshSkillTargets, refreshStartupSettings, showMessage])
 
   const saveSettings = useCallback(async (request: SettingsSaveRequest) => {
     setIsSavingSettings(true)
@@ -240,12 +265,14 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
     isAddingCliPath,
     isCheckingUpdate,
     isInstallingUpdate,
+    isRefreshingSettings,
     isSavingSettings,
     isSavingStartup,
     isSyncingSkills,
     ollamaModels,
     refreshCliPathSettings,
     refreshSettings,
+    refreshSettingsData,
     refreshStartupSettings,
     saveSettings,
     setStartupEnabled,

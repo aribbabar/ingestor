@@ -224,6 +224,22 @@
   transition: width 160ms ease;
 }
 
+.progressTrack[data-indeterminate='true'] span {
+  animation: progressIndeterminate 1200ms ease-in-out infinite;
+  min-width: 0;
+  width: 34%;
+}
+
+@keyframes progressIndeterminate {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  100% {
+    transform: translateX(300%);
+  }
+}
+
 .jobProgress > span {
   color: var(--muted);
   font-size: var(--font-size-xs);

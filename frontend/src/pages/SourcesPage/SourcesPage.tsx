@@ -297,6 +297,19 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 function JobProgress({ job, source }: { job: IndexJob; source: SourceRecord }) {
   const progress = jobProgress(job)
+  if (progress.percent === null) {
+    return (
+      <div className={styles.jobProgress} aria-label={`${source.name} indexing progress`}>
+        <div className={styles.progressTrack} data-indeterminate="true" role="progressbar" aria-valuetext={progress.label}>
+          <span />
+        </div>
+        <span>
+          {progress.label}
+          {progress.eta ? ` - ${progress.eta}` : ''}
+        </span>
+      </div>
+    )
+  }
   return (
     <div className={styles.jobProgress} aria-label={`${source.name} indexing progress`}>
       <div className={styles.progressTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}>

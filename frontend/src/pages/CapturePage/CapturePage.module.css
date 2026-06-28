@@ -61,6 +61,14 @@
   display: grid;
   gap: var(--space-5);
   margin-bottom: var(--space-7);
+  position: relative;
+}
+
+.selectionBlock[data-dragging='true'] {
+  background: color-mix(in oklch, var(--accent-soft) 48%, transparent);
+  border-radius: var(--radius-lg);
+  outline: 2px dashed var(--accent);
+  outline-offset: var(--space-2);
 }
 
 .selectionHeader {
@@ -120,6 +128,50 @@
   color: var(--muted);
   font-size: var(--font-size-sm);
   padding: var(--space-6);
+}
+
+.dropZone {
+  align-items: center;
+  background: color-mix(in oklch, var(--bg) 82%, var(--surface));
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  min-height: 92px;
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.dropZone[data-enabled='true'] {
+  background: color-mix(in oklch, var(--accent-soft) 18%, var(--bg));
+  border-color: color-mix(in oklch, var(--accent) 58%, var(--border));
+}
+
+.dropZone strong {
+  color: var(--fg);
+  font-size: var(--font-size-md);
+  font-weight: 750;
+}
+
+.dropZone span {
+  font-size: var(--font-size-sm);
+}
+
+.dropOverlay {
+  align-items: center;
+  background: color-mix(in oklch, var(--surface) 88%, var(--accent-soft));
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  color: var(--accent);
+  display: flex;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  inset: 0;
+  justify-content: center;
+  pointer-events: none;
+  position: absolute;
 }
 
 .selectedPath button {
@@ -541,6 +593,22 @@
   height: 100%;
   min-width: 8px;
   transition: width 160ms ease;
+}
+
+.progressTrack[data-indeterminate='true'] span {
+  animation: progressIndeterminate 1200ms ease-in-out infinite;
+  min-width: 0;
+  width: 34%;
+}
+
+@keyframes progressIndeterminate {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  100% {
+    transform: translateX(300%);
+  }
 }
 
 .jobProgress > span {

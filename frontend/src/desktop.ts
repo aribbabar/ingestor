@@ -3,6 +3,8 @@ import { listen } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-dialog'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check, type Update } from '@tauri-apps/plugin-updater'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import type { DragDropEvent } from '@tauri-apps/api/window'
 
 const backendUrl = 'http://127.0.0.1:8765'
 let pendingUpdate: Update | null = null
@@ -68,6 +70,23 @@ function installDesktopBridge() {
       let cancelled = false
       let unlisten: (() => void) | null = null
       void listen<BackendStatus>('backend-status', (event) => callback(event.payload)).then((handler) => {
+        if (cancelled) {
+          handler()
+          return
+        }
+        unlisten = handler
+      })
+      return () => {
+        cancelled = true
+        unlisten?.()
+      }
+    },
+    onLocalPathDrop: (callback) => {
+      let cancelled = false
+      let unlisten: (() => void) | null = null
+      void getCurrentWindow().onDragDropEvent((event: { payload: DragDropEvent }) => {
+        callback(event.payload)
+      }).then((handler) => {
         if (cancelled) {
           handler()
           return

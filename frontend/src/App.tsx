@@ -69,6 +69,7 @@ function App() {
   }))
   const [isPickingFolder, setIsPickingFolder] = useState(false)
   const [isPickingFiles, setIsPickingFiles] = useState(false)
+  const [isDraggingLocalPaths, setIsDraggingLocalPaths] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [message, setMessage] = useState<AppMessage | null>(null)
 
@@ -109,11 +110,13 @@ function App() {
     isAddingCliPath,
     isCheckingUpdate,
     isInstallingUpdate,
+    isRefreshingSettings,
     isSavingSettings,
     isSavingStartup,
     isSyncingSkills,
     ollamaModels,
     refreshCliPathSettings,
+    refreshSettingsData,
     refreshSettings: refreshSettingsBundle,
     refreshStartupSettings,
     saveSettings,
@@ -130,9 +133,7 @@ function App() {
     activeLogs,
     applyInitialSearchMode,
     applySavedSearchMode,
-    blockedSearchSources,
     cancelJob,
-    clearSearchOutput,
     deletePendingSource,
     deletingSourceId,
     hasSearched,
@@ -146,7 +147,6 @@ function App() {
     reindexingSourceId,
     reindexSource,
     searchDocs,
-    searchableSources,
     searchLimit,
     searchMode,
     searchOutput,
@@ -204,6 +204,30 @@ function App() {
     void refreshSources()
   }, [activeView, apiStatus, refreshSources])
 
+  useEffect(() => {
+    if (!window.ingestorDesktop?.onLocalPathDrop) return
+    return window.ingestorDesktop.onLocalPathDrop((event) => {
+      if (event.type === 'enter' || event.type === 'over') {
+        if (activeView === 'capture') setIsDraggingLocalPaths(true)
+        return
+      }
+      if (event.type === 'leave') {
+        setIsDraggingLocalPaths(false)
+        return
+      }
+      setIsDraggingLocalPaths(false)
+      const paths = normalizePathList(event.paths)
+      if (!paths.length) return
+      setMode('local')
+      setLocalForm((current) => ({
+        ...current,
+        paths: normalizePathList([...current.paths, ...paths]),
+      }))
+      if (activeView !== 'capture') navigate('/capture')
+      showMessage('capture', { text: `Added ${formatPathCount(paths.length)} to selected paths`, tone: 'success' })
+    })
+  }, [activeView, navigate, showMessage])
+
   async function retryApiConnection() {
     setApiStatus('checking')
     setMessage(null)
@@ -212,12 +236,6 @@ function App() {
     } catch {
       setApiStatus('offline')
     }
-  }
-
-  function searchFromCapture(sourceId?: string) {
-    if (sourceId) selectSource(sourceId)
-    clearSearchOutput()
-    navigate('/sources')
   }
 
   async function registerLocalSource(event: FormEvent<HTMLFormElement>) {
@@ -404,6 +422,13 @@ function App() {
     return nextSettings
   }
 
+  async function handleRefreshSettings() {
+    const nextSettings = await refreshSettingsData()
+    if (nextSettings) {
+      applySavedSearchMode(nextSettings.default_search_mode)
+    }
+  }
+
   return (
     <div className={styles.appShell}>
       <AppHeader activeView={activeView} apiStatus={apiStatus} />
@@ -424,10 +449,11 @@ function App() {
                   mode={mode}
                   message={captureMessage}
                   recentSources={recentSources}
-                  blockedSearchSources={blockedSearchSources}
-                  searchableSources={searchableSources}
                   localForm={localForm}
                   webForm={webForm}
+                  totalSourceCount={sources.length}
+                  isDraggingLocalPaths={isDraggingLocalPaths}
+                  isLocalPathDropAvailable={Boolean(window.ingestorDesktop?.onLocalPathDrop)}
                   isPickingFiles={isPickingFiles}
                   isPickingFolder={isPickingFolder}
                   isSubmitting={isSubmitting}
@@ -442,7 +468,6 @@ function App() {
                   onResetWebOptions={resetWebOptions}
                   onNavigate={(view) => navigate(`/${view}`)}
                   onSelectSource={selectSource}
-                  onSearchSource={searchFromCapture}
                   onCancelJob={(job) => cancelJob(job, 'capture')}
                 />
               }
@@ -490,11 +515,13 @@ function App() {
                   ollamaModels={ollamaModels}
                   isDesktopAvailable={Boolean(window.ingestorDesktop)}
                   isSavingSettings={isSavingSettings}
+                  isRefreshingSettings={isRefreshingSettings}
                   isSyncingSkills={isSyncingSkills}
                   isSavingStartup={isSavingStartup}
                   isAddingCliPath={isAddingCliPath}
                   isCheckingUpdate={isCheckingUpdate}
                   isInstallingUpdate={isInstallingUpdate}
+                  onRefreshSettings={handleRefreshSettings}
                   onSaveSettings={handleSaveSettings}
                   onSyncSkills={syncSkills}
                   onSetStartupEnabled={setStartupEnabled}
@@ -527,6 +554,10 @@ function App() {
 
 function normalizePathList(paths: string[]) {
   return Array.from(new Set(paths.map((path) => path.trim()).filter(Boolean)))
+}
+
+function formatPathCount(count: number) {
+  return `${count} ${count === 1 ? 'path' : 'paths'}`
 }
 
 function splitPatternLines(value: string) {

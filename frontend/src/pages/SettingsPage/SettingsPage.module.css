@@ -30,6 +30,14 @@
   font-size: var(--font-size-sm);
 }
 
+.panelActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+
 .rowCopy p,
 .rowCopy span,
 .rowNote,
@@ -230,6 +238,48 @@
   font-size: var(--font-size-md);
 }
 
+.inlineTitle {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.cliPathStatus {
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  display: inline-flex;
+  gap: var(--space-2);
+  font-size: var(--font-size-2xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: var(--space-1) var(--space-3);
+  text-transform: uppercase;
+}
+
+.cliPathStatus::before {
+  background: currentColor;
+  border-radius: 50%;
+  content: '';
+  height: 8px;
+  width: 8px;
+}
+
+.cliPathStatus[data-state='ready'] {
+  background: color-mix(in oklch, var(--success) 12%, var(--surface));
+  border-color: color-mix(in oklch, var(--success) 36%, var(--border));
+  color: var(--success);
+}
+
+.cliPathStatus[data-state='missing'] {
+  background: color-mix(in oklch, var(--danger) 10%, var(--surface));
+  border-color: color-mix(in oklch, var(--danger) 32%, var(--border));
+  color: var(--danger);
+}
+
 .cliPathHeader p {
   color: var(--muted);
   font-size: var(--font-size-sm);
@@ -385,6 +435,10 @@
   .panelHeader {
     align-items: stretch;
     display: grid;
+  }
+
+  .panelActions {
+    justify-content: stretch;
   }
 
   .resetNotice {

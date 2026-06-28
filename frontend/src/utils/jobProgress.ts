@@ -1,7 +1,7 @@
 import type { IndexJob } from '../types'
 
 export type JobProgressSummary = {
-  percent: number
+  percent: number | null
   label: string
   eta?: string
 }
@@ -9,13 +9,20 @@ export type JobProgressSummary = {
 export function jobProgress(job: IndexJob): JobProgressSummary {
   const total = job.progress_total ?? 0
   const current = Math.max(0, job.progress_current)
-  const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 8
   const unit = job.progress_label.startsWith('http') ? 'pages' : 'files'
+  const complete = job.status === 'succeeded'
+  const percent = complete ? 100 : total > 0 ? Math.min(100, Math.round((current / total) * 100)) : null
+  if (complete) {
+    return {
+      percent,
+      label: 'Index complete',
+    }
+  }
   const baseLabel =
     total > 0
       ? `${current} of ${total} ${unit} scanned`
       : current > 0
-        ? `${current} ${unit} scanned`
+        ? `${current} ${unit} indexed`
         : job.status === 'cancelling'
           ? 'Cancelling'
           : 'Starting'
