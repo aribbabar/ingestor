@@ -172,7 +172,15 @@ release\v0.1.0\latest.json
 
 Before each release, commit the version bump produced by `release:build-update` along with the release changes. Use `--no-bump` only when rebuilding the same release version.
 
-Publish the MSI, `.sig`, and a `latest.json` update manifest to the GitHub Release. The app checks this endpoint:
+After committing and pushing the version bump, publish the GitHub Release with:
+
+```powershell
+npm run release:publish
+```
+
+Use `npm run release:publish -- --dry-run` to print the GitHub CLI command without creating the release. If a release already exists and you need to upload the staged files again, run `npm run release:publish -- --replace-assets`.
+
+The publish wrapper uploads the MSI, `.sig`, and `latest.json` update manifest to the GitHub Release. The app checks this endpoint:
 
 ```text
 https://github.com/aribbabar/ingestor/releases/latest/download/latest.json
@@ -199,8 +207,8 @@ Release flow:
 1. Run the verification checks below.
 2. Build with `npm run release:build-update`.
 3. Commit the generated version bump and release changes.
-4. Create a GitHub Release, for example `v0.1.1`.
-5. Upload the MSI, matching `.sig`, and `latest.json`.
+4. Push the release commit.
+5. Publish with `npm run release:publish`.
 6. Install the previous release, open Settings, check for updates, and verify that the new release installs.
 
 ## Project Layout
