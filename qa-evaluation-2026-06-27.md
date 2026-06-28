@@ -119,6 +119,7 @@ Verification run after the fixes:
 | Source inspection for `frontend\src\pages\CapturePage\CapturePage.tsx` progress guard | Pass: progress panel requires a selected source and matching latest job source id |
 | Browser verification at `http://127.0.0.1:1420/#/sources` search panel | Pass: search button rendered with stable inline-flex layout and settled search results rendered |
 | Browser verification at `http://127.0.0.1:1420/#/capture` progress panel | Pass: progress rendered for the selected source's matching job |
+| Source inspection for route Error Boundary | Pass: `App.tsx` wraps the route surface with `RouteErrorBoundary`, which provides a Reload recovery action |
 
 Still open from this report: USA-3, USA-6, PERF-5, and CODE-10.
 
@@ -128,7 +129,7 @@ Still open from this report: USA-3, USA-6, PERF-5, and CODE-10.
 
 Ingestor is a Tauri shell wrapping a React renderer and a Python FastAPI backend that indexes local folders or crawled web pages into a local SQLite + sqlite-vec store for retrieval-augmented generation. The Tauri window launches cleanly and the three pages (Capture / Sources / Settings) are visually consistent, responsive, and follow a clear teal/cream palette with good typographic hierarchy.
 
-The app is broadly usable today: capture, reindex, search, delete, and settings save/reset all work as expected against the local source fixture. However, a single **Critical** defect — Reindex silently fails (and zeroes the document/chunk counts) whenever the snapshot directory is missing or unreadable — produces real data loss in normal user flows and is reproducible today. The Settings Reset path is also a silent landmine: clicking Reset + Save invalidates every previously indexed source without a confirmation dialog. Several accessibility issues make the app harder for screen reader users than the design suggests, and there is no React Error Boundary, so a render-time crash anywhere would white-screen the whole app with no recovery path. A small amount of dead code and a duplicated `tkinter` fallback in the backend round out the list.
+The app is broadly usable today: capture, reindex, search, delete, and settings save/reset all work as expected against the local source fixture. The original report called out several defects and accessibility issues; follow-up implementation has since addressed the critical reindex snapshot recovery, reset confirmation, route Error Boundary, dead CSS, and tkinter fallback documentation items. The remaining substantive open reliability issue is the cooperative-only cancellation behavior during slow web crawls.
 
 The remainder of this report documents what was observed, with reproduction steps and severity ratings. Code paths are referenced as `path:line`.
 
@@ -445,7 +446,7 @@ Identical 30-line copies in `frontend/src/pages/SourcesPage/SourcesPage.tsx:330-
 
 ### CODE-5 — No React Error Boundary  [Medium]
 
-`App.tsx` has no `<ErrorBoundary>` wrapping the three `<Route>` components. A throw inside `CapturePage`, `SourcesPage`, or `SettingsPage` (e.g. from a malformed source metadata) would white-screen the entire app with no recovery path other than killing the Tauri window. Add a small Error Boundary component that shows a friendly error and a "Reload" button.
+Follow-up: addressed. `frontend/src/App.tsx` wraps the route surface with `RouteErrorBoundary`, and `frontend/src/components/layout/RouteErrorBoundary/RouteErrorBoundary.tsx` shows a friendly render-failure message with a Reload action.
 
 ---
 
@@ -530,7 +531,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | PERF-2 | `loadSettingsBundle` has no timeout; can stall the initial UI on a slow backend                      | Apply the 3500 ms timeout used for optional Ollama / skills loads.                                                                                                                                    |
 | PERF-4 | tkinter-based folder picker endpoints are thread-unsafe and headless-fragile                        | Addressed: endpoints are deprecated browser-dev fallbacks with clearer unavailable-environment errors.                                                                                            |
 | CODE-1 | `jobProgress` / `formatEta` duplicated in CapturePage and SourcesPage                              | Extract to `frontend/src/utils/jobProgress.ts`.                                                                                                                                                       |
-| CODE-5 | No React Error Boundary wrapping the three routes                                                  | Add an Error Boundary component with a friendly message and a Reload button.                                                                                                                          |
+| CODE-5 | No React Error Boundary wrapping the three routes                                                  | Addressed: route-level Error Boundary added with a Reload recovery action.                                                                                                                            |
 
 ### Low
 

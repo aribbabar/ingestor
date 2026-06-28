@@ -118,8 +118,10 @@ Verification run after the fixes:
 | Source inspection for `frontend\src\pages\CapturePage\CapturePage.tsx` progress guard | Pass: progress panel requires a selected source and matching latest job source id |
 | Browser verification at `http://127.0.0.1:1420/#/sources` search panel | Pass: search button rendered with stable inline-flex layout and settled search results rendered |
 | Browser verification at `http://127.0.0.1:1420/#/capture` progress panel | Pass: progress rendered for the selected source's matching job |
+| Source inspection for route Error Boundary | Pass: `App.tsx` wraps the route surface with `RouteErrorBoundary`, which provides a Reload recovery action |
+| Source inspection for Capture cancel action | Pass: Capture exposes `Cancel indexing` for the selected active job |
 
-Still open from this report: the remaining lower-priority cleanup/performance items, excluding old CODE-3, old UX-5, USA-4, USA-5, PERF-1, PERF-2, PERF-3, PERF-6, CODE-3, CODE-7, and CODE-9 from the fresh report.
+Still open from this report: the remaining lower-priority cleanup/performance items, excluding old CODE-3, old CODE-6, old UX-5, old USA-3, USA-4, USA-5, PERF-1, PERF-2, PERF-3, PERF-6, CODE-3, CODE-7, and CODE-9 from the fresh report.
 
 ---
 
@@ -265,9 +267,9 @@ This is extremely verbose for screen reader users. All of this information is al
 **Severity:** Medium  
 **Category:** Reliability  
 
-**Observation:** The `App.tsx` component renders `<Routes>` with three page components (CapturePage, SourcesPage, SettingsPage) but has no React Error Boundary wrapping them. If any page component throws during render (e.g., from a type mismatch in source metadata), the entire app would crash to a white screen with no recovery path.
+**Observation:** Follow-up found this is now addressed. `App.tsx` wraps the route surface with `RouteErrorBoundary`, and the boundary shows a render-failure message with a Reload action.
 
-**Recommendation:** Add an Error Boundary component wrapping each route, showing a friendly error message with a "Reload" button.
+**Recommendation:** Addressed.
 
 ---
 
@@ -291,7 +293,7 @@ The search form has `required` on the query input, so submitting an empty query 
 
 ### USA-3: No way to cancel a web crawl from the Capture page [Low]
 
-The Capture page shows indexing progress with a "Cancel indexing" button, but this is only visible when `latestJob` is active and `selectedSource` is set. For web sources, the crawl may take a long time and the user may want to cancel from the Capture page. Currently, the user must navigate to the Sources page to cancel.
+Follow-up found this older finding is stale. The Capture progress panel now exposes `Cancel indexing` when the selected source has an active job. The separate fresh finding about slow cooperative cancellation inside the web crawler remains open as USA-3 / PERF-5 in `qa-evaluation-2026-06-27.md`.
 
 ---
 
@@ -411,7 +413,7 @@ In `deletePendingSource()`, if `deleteSourceRequest()` throws, `setSourcePending
 
 **File:** `frontend/src/App.tsx`
 
-The app has no `<ErrorBoundary>` component wrapping the route components. An unhandled exception in any page component would crash the entire app to a white screen.
+Follow-up: addressed. `App.tsx` wraps the route surface with `RouteErrorBoundary`, which displays a render-failure message with a Reload recovery action.
 
 ---
 
@@ -471,7 +473,7 @@ return () => { cancelled = true; unlisten?.() }
 | BUG-2 | Settings reset silently invalidates all indexes | Add confirmation dialog before saving a reset that affects existing sources |
 | BUG-3 | Orphaned processes hold ports | Ensure child processes are terminated on app exit; detect port conflicts on startup |
 | UX-1 | Disabled buttons invisible to accessibility | Use native `disabled` attribute; keep buttons in AX tree |
-| CODE-6 | No React Error Boundary | Add Error Boundary wrapping route components |
+| CODE-6 | No React Error Boundary | Addressed: route-level Error Boundary added with a Reload recovery action |
 
 ### Medium
 
@@ -494,7 +496,7 @@ return () => { cancelled = true; unlisten?.() }
 | UX-4 | Split text nodes throughout UI | Use template literals or `aria-label` on containers |
 | UX-5 | No spinner during search | Addressed: the Search button shows an animated loader while searching |
 | USA-2 | Ambiguous "No results yet" state | Distinguish "never searched" from "zero results" |
-| USA-3 | No cancel from Capture page for web crawls | Add cancel button in Capture progress section |
+| USA-3 | No cancel from Capture page for web crawls | Clarified as stale: Capture shows Cancel indexing for the selected active job |
 | USA-4 | No keyboard shortcut indication for search | Add hint text or Enter key affordance |
 | PERF-3 | Low vector score discrimination with local hashing | Addressed: notice added when local hashing is active |
 | CODE-2 | Dead CSS file `App.css` | Delete or migrate relevant styles |
@@ -520,6 +522,6 @@ return () => { cancelled = true; unlisten?.() }
 
 Ingestor is a well-structured Tauri desktop app with a clean React frontend and a Python FastAPI backend. The codebase is generally well-organized with CSS modules, typed components, and clear separation of concerns. The build, lint, and tests all pass.
 
-The most critical issue is **BUG-1** (reindex fails when the snapshot directory is lost), which is a data-loss scenario that can occur during normal use when settings are changed. The **accessibility issues** around disabled buttons being invisible to screen readers (UX-1) and the excessively long source button accessible name (UX-3) are the most impactful UX issues. The **orphaned process** port conflict (BUG-3) affects developer experience but not end users of the installed app.
+The most critical issue in the original report was **BUG-1** (reindex fails when the snapshot directory is lost), which has since been addressed. The major accessibility issues around disabled buttons and verbose source names have also been addressed. The **orphaned process** port conflict (BUG-3) still affects developer experience but not end users of the installed app.
 
-The codebase has some technical debt: duplicated utility functions (CODE-1), a dead CSS file (CODE-2), and a fragile tkinter dependency (CODE-3). These are not blocking but should be addressed in future iterations.
+Several technical-debt items from the original report have also been cleaned up, including duplicated progress helpers, dead CSS, and tkinter fallback documentation. Remaining items are mostly low-priority polish plus the deeper web-crawl cancellation behavior tracked in the fresh report.
