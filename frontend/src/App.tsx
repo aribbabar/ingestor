@@ -56,6 +56,8 @@ const initialWebForm: WebForm = {
 
 const WEB_OPTIONS_STORAGE_KEY = 'ingestor.capture.webOptions.v2'
 const LEGACY_WEB_OPTIONS_STORAGE_KEYS = ['ingestor.capture.webOptions.v1']
+const UPDATE_STARTUP_CHECK_DELAY_MS = 5000
+const UPDATE_BACKGROUND_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 function App() {
   const location = useLocation()
@@ -127,6 +129,7 @@ function App() {
     syncSkills,
     updateMessage,
     updateStatus,
+    checkForUpdatesIfDue,
   } = settingsController
 
   const sourcesController = useSourcesController({ settings, showMessage })
@@ -204,6 +207,29 @@ function App() {
     if (apiStatus !== 'online' || activeView !== 'sources') return
     void refreshSources()
   }, [activeView, apiStatus, refreshSources])
+
+  useEffect(() => {
+    if (apiStatus !== 'online' || !window.ingestorDesktop) return
+
+    const checkIfDue = () => {
+      void checkForUpdatesIfDue()
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') checkIfDue()
+    }
+
+    const startupTimer = window.setTimeout(checkIfDue, UPDATE_STARTUP_CHECK_DELAY_MS)
+    const backgroundTimer = window.setInterval(checkIfDue, UPDATE_BACKGROUND_CHECK_INTERVAL_MS)
+    window.addEventListener('focus', checkIfDue)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearTimeout(startupTimer)
+      window.clearInterval(backgroundTimer)
+      window.removeEventListener('focus', checkIfDue)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [apiStatus, checkForUpdatesIfDue])
 
   useEffect(() => {
     if (!window.ingestorDesktop?.onLocalPathDrop) return

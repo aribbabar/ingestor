@@ -25,6 +25,8 @@ import type {
 type AppMessage = Exclude<Message, null>
 
 const OPTIONAL_SETTINGS_TIMEOUT_MS = 3500
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000
+const UPDATE_LAST_CHECKED_STORAGE_KEY = 'ingestor.updates.lastCheckedAt'
 
 type UseSettingsControllerOptions = {
   showMessage: (view: ViewName, message: AppMessage) => void
@@ -223,22 +225,32 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
     }
   }, [cliPathSettings?.path, showMessage])
 
-  const checkForUpdates = useCallback(async () => {
+  const checkForUpdates = useCallback(async (options: { silent?: boolean } = {}) => {
     if (!window.ingestorDesktop) return
-    setUpdateMessage(null)
-    setIsCheckingUpdate(true)
+    if (!options.silent) {
+      setUpdateMessage(null)
+      setIsCheckingUpdate(true)
+    }
     try {
       const nextStatus = await window.ingestorDesktop.checkForUpdate()
       setUpdateStatus(nextStatus)
+      storeLastUpdateCheckAt(Date.now())
     } catch (error) {
-      setUpdateMessage({
-        text: error instanceof Error ? error.message : 'Unable to check for updates',
-        tone: 'error',
-      })
+      if (!options.silent) {
+        setUpdateMessage({
+          text: error instanceof Error ? error.message : 'Unable to check for updates',
+          tone: 'error',
+        })
+      }
     } finally {
-      setIsCheckingUpdate(false)
+      if (!options.silent) setIsCheckingUpdate(false)
     }
   }, [])
+
+  const checkForUpdatesIfDue = useCallback(async () => {
+    if (!window.ingestorDesktop || !isUpdateCheckDue()) return
+    await checkForUpdates({ silent: true })
+  }, [checkForUpdates])
 
   const installUpdate = useCallback(async () => {
     if (!window.ingestorDesktop || !updateStatus?.available) return
@@ -258,6 +270,7 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
   return {
     addCliToPath,
     checkForUpdates,
+    checkForUpdatesIfDue,
     cliPathSettings,
     copyCliPath,
     installUpdate,
@@ -281,5 +294,22 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
     syncSkills,
     updateMessage,
     updateStatus,
+  }
+}
+
+function isUpdateCheckDue() {
+  try {
+    const lastCheckedAt = Number(window.localStorage.getItem(UPDATE_LAST_CHECKED_STORAGE_KEY))
+    return !Number.isFinite(lastCheckedAt) || Date.now() - lastCheckedAt >= UPDATE_CHECK_INTERVAL_MS
+  } catch {
+    return true
+  }
+}
+
+function storeLastUpdateCheckAt(timestamp: number) {
+  try {
+    window.localStorage.setItem(UPDATE_LAST_CHECKED_STORAGE_KEY, String(timestamp))
+  } catch {
+    // Update checks should still work when localStorage is unavailable.
   }
 }
