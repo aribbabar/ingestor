@@ -5,6 +5,7 @@ import { PageHeading } from '../../components/ui/PageHeading/PageHeading'
 import { SelectControl } from '../../components/ui/SelectControl/SelectControl'
 import { classNames } from '../../utils/classNames'
 import { jobProgress } from '../../utils/jobProgress'
+import { LoaderCircle } from 'lucide-react'
 import {
   isActiveJob,
   isRecord,
@@ -254,7 +255,14 @@ export function SourcesPage({
             />
           </div>
           <button className={styles.primaryButton} disabled={!selectedSource || !selectedSourceQueryable || isSearching} type="submit">
-            {isSearching ? 'Searching' : 'Search'}
+            {isSearching ? (
+              <>
+                <LoaderCircle aria-hidden="true" className={styles.buttonSpinner} size={16} strokeWidth={2.4} />
+                Searching
+              </>
+            ) : (
+              'Search'
+            )}
           </button>
         </form>
         {searchOutput && isSelectedSourceReindexing ? (

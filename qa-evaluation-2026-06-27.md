@@ -79,6 +79,11 @@ Picker fallback and SQLite concurrency documentation fixes from this pass:
 - **PERF-4:** The tkinter-backed file picker API is now documented as a deprecated browser-dev fallback, with clearer 503 errors when tkinter cannot open a desktop dialog.
 - **PERF-6:** SQLite WAL mode is now documented at both connection setup points, making the read-during-indexing concurrency choice explicit.
 
+Search feedback and Capture progress-state fixes from this pass:
+
+- **UX-7:** The Sources search submit button now shows a spinning loader icon while `isSearching` is true, while preserving the existing result-retention behavior.
+- **USA-4:** Capture now renders progress only when the latest job belongs to the selected source, so a deleted or transiently missing source falls back to the empty progress state instead of a stale progress bar.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -110,8 +115,12 @@ Verification run after the fixes:
 | Source inspection for `backend\app\api\folders.py` picker fallback docs | Pass: tkinter routes are deprecated browser-dev fallbacks with clearer unavailable-environment errors |
 | In-process FastAPI OpenAPI schema check for picker fallback routes | Pass: folder and file picker routes are marked deprecated with browser-dev fallback summaries |
 | Source inspection for `backend\app\db\database.py` SQLite pragmas | Pass: WAL mode is documented for SQLAlchemy and direct sqlite3 connections |
+| Source inspection for `frontend\src\pages\SourcesPage\SourcesPage.tsx` and CSS | Pass: search submit button renders a fixed-size animated loader while searching |
+| Source inspection for `frontend\src\pages\CapturePage\CapturePage.tsx` progress guard | Pass: progress panel requires a selected source and matching latest job source id |
+| Browser verification at `http://127.0.0.1:1420/#/sources` search panel | Pass: search button rendered with stable inline-flex layout and settled search results rendered |
+| Browser verification at `http://127.0.0.1:1420/#/capture` progress panel | Pass: progress rendered for the selected source's matching job |
 
-Still open from this report: USA-3, USA-4, USA-6, PERF-5, and CODE-10.
+Still open from this report: USA-3, USA-6, PERF-5, and CODE-10.
 
 ---
 
@@ -283,7 +292,7 @@ When the user clicks **Reset** in Settings (`SettingsPage.tsx:148-154` → `rese
 
 The Search button text changes to "Searching" but no spinner or skeleton appears. For Ollama-backed search the wait can be several seconds. The results area shows `No results yet.` (the previous results were cleared at `useSourcesController.ts:139`) which looks identical to "I haven't searched yet."
 
-**Recommendation:** Either keep previous results visible with a subtle "Refreshing…" overlay, or add a spinner to the Search button while `isSearching` is true, and replace `No results yet.` with `Searching…` during the request.
+**Follow-up:** Addressed by adding a fixed-size animated loader icon to the Search button while `isSearching` is true. Existing results remain visible while a new search is in flight.
 
 ---
 
@@ -336,7 +345,7 @@ When no sources are indexed yet, the Capture page progress panel shows the small
 
 **Reproduction:** Delete the last source → navigate to Capture → the Index Progress panel shows "Starting" with an 8% progress bar but no actual job is running.
 
-**Recommendation:** Show a distinct "No indexing job has started yet" message in this case (it is actually rendered — `CapturePage.tsx:425-427` — but only when there is no `latestJob`. When `latestJob` exists but the source is gone, the spinner can still render because `selectedSource` is undefined and `latestJob` matches a now-deleted job. After delete, the UI does update but only after a polling tick; during the gap the panel can show the progress bar with no source context.)
+**Follow-up:** Addressed by deriving a `progressJob` only when `latestJob.source_id` matches the selected source id. If the selected source is missing or mismatched, Capture shows the existing "No indexing job has started yet" empty state.
 
 ---
 
@@ -530,11 +539,11 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | BUG-5  | Empty Limit produces `0`                                                                        | Sanitize: `Math.max(1, Math.min(50, Number(value) || 1))`.                                                                                                       |
 | BUG-6  | Reindex clears search results                                                                   | Same fix as BUG-3.                                                                                                                                              |
 | UX-4   | Many JSX expressions produce split text nodes                                                   | Wrap in a single span with `aria-label={fullSentence}` or use a single template literal.                                                                       |
-| UX-7   | No spinner during search                                                                        | Show a spinner inside the Search button while `isSearching`, and replace `No results yet.` with `Searching…`.                                                  |
+| UX-7   | No spinner during search                                                                        | Addressed: the Search button shows an animated loader while `isSearching` is true.                                                                              |
 | UX-8   | Long source paths truncate awkwardly on small viewports                                        | Use `text-overflow: ellipsis` + consistent `:focus-visible` outline.                                                                                          |
 | UX-9   | Recent sources don't deep-link to the matching job log                                          | Add a "View log" link or auto-navigate to Capture's progress section.                                                                                          |
 | USA-2  | No signal that on-disk files have changed since last index                                      | Compare mtimes; show a "Files changed — Reindex recommended" hint. Out of scope of this evaluation but worth tracking.                                          |
-| USA-4  | Capture page progress panel can show stale "Starting" state during transitions                 | Tighten `latestJob` selection or hide the panel when `selectedSource` is undefined.                                                                            |
+| USA-4  | Capture page progress panel can show stale "Starting" state during transitions                 | Addressed: progress now requires a selected source and matching latest job source id.                                                                           |
 | USA-5  | Capture page log context lost when navigating away                                              | Addressed: active logs are cached by job id and rehydrated for the selected source's latest job.                                                                 |
 | USA-6  | Spinner button states at min/max are subtle                                                     | No change required.                                                                                                                                              |
 | USA-7  | Status pill text is lowercase                                                                    | Render the title-case label and visually style the dot.                                                                                                         |

@@ -99,6 +99,7 @@ export function CapturePage({
 }: CapturePageProps) {
   const isLocal = mode === "local";
   const isPickingLocalPath = isPickingFolder || isPickingFiles;
+  const progressJob = selectedSource && latestJob?.source_id === selectedSource.id ? latestJob : undefined;
   const lastLogLine = latestLogLine(activeLogs);
   const recentLogLines = latestLogLines(activeLogs, 4);
   const selectedDocumentType = selectedSource?.kind === "web" ? "pages" : "docs";
@@ -361,14 +362,14 @@ export function CapturePage({
           ) : null}
         </div>
 
-        {latestJob && selectedSource ? (
+        {progressJob && selectedSource ? (
           <div className={styles.progressContent}>
             <div className={styles.progressSummary}>
               <div>
                 <strong>
-                  {latestJob.status === "running"
+                  {progressJob.status === "running"
                     ? "Indexing"
-                    : latestJob.status}
+                    : progressJob.status}
                 </strong>
                 <span>{selectedSource.name}</span>
               </div>
@@ -383,21 +384,21 @@ export function CapturePage({
                 </span>
               </div>
             </div>
-            <JobProgress job={latestJob} />
+            <JobProgress job={progressJob} />
             <ol className={styles.stageList}>
               <li className={styles.done}>
                 <span /> Registered
               </li>
               <li
                 className={
-                  isActiveJob(latestJob) ? styles.active : styles.done
+                  isActiveJob(progressJob) ? styles.active : styles.done
                 }
               >
                 <span /> Ingesting
               </li>
               <li
                 className={
-                  latestJob.status === "succeeded"
+                  progressJob.status === "succeeded"
                     ? styles.done
                     : styles.pending
                 }
@@ -406,18 +407,18 @@ export function CapturePage({
               </li>
             </ol>
             <div className={styles.jobDetail}>
-              <span>Job {latestJob.id.slice(0, 8)}</span>
-              <span>{latestJob.message || selectedSource.location}</span>
+              <span>Job {progressJob.id.slice(0, 8)}</span>
+              <span>{progressJob.message || selectedSource.location}</span>
             </div>
-            {isActiveJob(latestJob) ? (
+            {isActiveJob(progressJob) ? (
               <div className={styles.progressActions}>
                 <button
                   className={styles.dangerButton}
-                  disabled={latestJob.status === "cancelling"}
-                  onClick={() => onCancelJob(latestJob)}
+                  disabled={progressJob.status === "cancelling"}
+                  onClick={() => onCancelJob(progressJob)}
                   type="button"
                 >
-                  {latestJob.status === "cancelling" ? "Cancelling" : "Cancel indexing"}
+                  {progressJob.status === "cancelling" ? "Cancelling" : "Cancel indexing"}
                 </button>
               </div>
             ) : null}

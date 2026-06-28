@@ -41,9 +41,14 @@
 }
 
 .primaryButton {
+  align-items: center;
   background: var(--accent);
   border: 0;
   color: #fff;
+  display: inline-flex;
+  gap: var(--space-2);
+  justify-content: center;
+  min-width: 96px;
 }
 
 .secondaryButton {
@@ -63,6 +68,17 @@
 .dangerButton:disabled {
   cursor: wait;
   opacity: 0.55;
+}
+
+.buttonSpinner {
+  animation: spin 800ms linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .sourceList,

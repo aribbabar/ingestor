@@ -78,6 +78,11 @@ Picker fallback and SQLite concurrency documentation fixes from this pass:
 - **CODE-3:** The tkinter-backed file picker API is now documented as a deprecated browser-dev fallback, with clearer 503 errors when tkinter cannot open a desktop dialog.
 - **PERF-6 from the fresh QA report:** SQLite WAL mode is now documented at both connection setup points, making the read-during-indexing concurrency choice explicit.
 
+Search feedback and Capture progress-state fixes from this pass:
+
+- **UX-5 / UX-7 from the fresh QA report:** The Sources search submit button now shows a spinning loader icon while `isSearching` is true, while preserving the existing result-retention behavior.
+- **USA-4 from the fresh QA report:** Capture now renders progress only when the latest job belongs to the selected source, so a deleted or transiently missing source falls back to the empty progress state instead of a stale progress bar.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -109,8 +114,12 @@ Verification run after the fixes:
 | Source inspection for `backend\app\api\folders.py` picker fallback docs | Pass: tkinter routes are deprecated browser-dev fallbacks with clearer unavailable-environment errors |
 | In-process FastAPI OpenAPI schema check for picker fallback routes | Pass: folder and file picker routes are marked deprecated with browser-dev fallback summaries |
 | Source inspection for `backend\app\db\database.py` SQLite pragmas | Pass: WAL mode is documented for SQLAlchemy and direct sqlite3 connections |
+| Source inspection for `frontend\src\pages\SourcesPage\SourcesPage.tsx` and CSS | Pass: search submit button renders a fixed-size animated loader while searching |
+| Source inspection for `frontend\src\pages\CapturePage\CapturePage.tsx` progress guard | Pass: progress panel requires a selected source and matching latest job source id |
+| Browser verification at `http://127.0.0.1:1420/#/sources` search panel | Pass: search button rendered with stable inline-flex layout and settled search results rendered |
+| Browser verification at `http://127.0.0.1:1420/#/capture` progress panel | Pass: progress rendered for the selected source's matching job |
 
-Still open from this report: the remaining lower-priority cleanup/performance items, excluding old CODE-3, USA-5, PERF-1, PERF-2, PERF-3, PERF-6, CODE-3, CODE-7, and CODE-9 from the fresh report.
+Still open from this report: the remaining lower-priority cleanup/performance items, excluding old CODE-3, old UX-5, USA-4, USA-5, PERF-1, PERF-2, PERF-3, PERF-6, CODE-3, CODE-7, and CODE-9 from the fresh report.
 
 ---
 
@@ -236,7 +245,7 @@ This is extremely verbose for screen reader users. All of this information is al
 
 **Observation:** When executing a search, the Search button text changes to "Searching" but there is no spinner or visual progress indicator. For local-hashing embeddings the search is near-instant, but with Ollama embeddings the search could take several seconds. During this time, the search results section shows "No results yet." (the previous results are cleared with `setSearchOutput(null)` before the request).
 
-**Recommendation:** Show a spinner or skeleton state during search, and keep the previous results visible until new results arrive (or show a distinct "Searching..." state that replaces the empty state).
+**Recommendation:** Addressed by adding an animated loader icon to the Search button while `isSearching` is true. Existing results remain visible while a new search is in flight.
 
 ---
 
@@ -483,7 +492,7 @@ return () => { cancelled = true; unlisten?.() }
 | ID | Issue | Action |
 |---|---|---|
 | UX-4 | Split text nodes throughout UI | Use template literals or `aria-label` on containers |
-| UX-5 | No spinner during search | Add loading state for search results |
+| UX-5 | No spinner during search | Addressed: the Search button shows an animated loader while searching |
 | USA-2 | Ambiguous "No results yet" state | Distinguish "never searched" from "zero results" |
 | USA-3 | No cancel from Capture page for web crawls | Add cancel button in Capture progress section |
 | USA-4 | No keyboard shortcut indication for search | Add hint text or Enter key affordance |
