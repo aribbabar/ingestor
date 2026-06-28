@@ -1,6 +1,5 @@
 import type {
   EmbeddingIndexingStrategy,
-  HealthResponse,
   IndexJob,
   OllamaModelsResponse,
   SearchMode,
@@ -24,11 +23,8 @@ export async function loadSources() {
 }
 
 export async function loadSettingsBundle() {
-  const [health, settings] = await Promise.all([
-    requestJson<HealthResponse>('/api/health'),
-    requestJson<SettingsResponse>('/api/settings'),
-  ])
-  return { health, settings }
+  const settings = await requestJson<SettingsResponse>('/api/settings')
+  return { settings }
 }
 
 export async function loadOllamaModels(options: { timeoutMs?: number } = {}) {

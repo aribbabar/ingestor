@@ -72,6 +72,7 @@ export function SourcesPage({
   onSelectSource,
 }: SourcesPageProps) {
   const staleCount = sources.filter((source) => source.status === 'indexed' && !isSourceQueryable(source, settings)).length
+  const staleWarningText = `${formatIndexedSourceCount(staleCount)} must be re-indexed before search or agent retrieval.`
   const selectedSourceQueryable = isSourceQueryable(selectedSource, settings)
   const selectedSourceJob = selectedSource ? jobs.find((job) => job.source_id === selectedSource.id) : undefined
   const isSelectedSourceReindexing = Boolean(
@@ -101,7 +102,7 @@ export function SourcesPage({
         <MessageLine message={message} />
         {staleCount ? (
           <div className={styles.warningState}>
-            {staleCount} indexed source{staleCount === 1 ? '' : 's'} must be re-indexed before search or agent retrieval.
+            {staleWarningText}
           </div>
         ) : null}
 
@@ -308,30 +309,33 @@ function SearchResults({
 
   return (
     <div className={styles.resultList}>
-      {output.results.map((result, index) => (
-        <article className={styles.resultCard} key={`${result.uri}-${index}`}>
-          <div className={styles.resultHeader}>
-            <div>
-              <span className={styles.resultIndex}>Result {index + 1}</span>
-              <h3>{result.title}</h3>
+      {output.results.map((result, index) => {
+        const resultIndexLabel = `Result ${index + 1}`
+        return (
+          <article className={styles.resultCard} key={`${result.uri}-${index}`}>
+            <div className={styles.resultHeader}>
+              <div>
+                <span className={styles.resultIndex}>{resultIndexLabel}</span>
+                <h3>{result.title}</h3>
+              </div>
+              <span className={styles.score}>{result.score.toFixed(3)}</span>
             </div>
-            <span className={styles.score}>{result.score.toFixed(3)}</span>
-          </div>
-          <p className={styles.resultSource}>{result.uri}</p>
-          <p className={styles.snippet}>{formatSnippet(result.summary || result.content)}</p>
-          {result.code ? <pre className={styles.codeSnippet}>{result.code}</pre> : null}
-          <dl className={styles.metadataList}>
-            <div>
-              <dt>Keyword</dt>
-              <dd>{result.keyword_score.toFixed(3)}</dd>
-            </div>
-            <div>
-              <dt>Vector</dt>
-              <dd>{result.vector_score.toFixed(3)}</dd>
-            </div>
-          </dl>
-        </article>
-      ))}
+            <p className={styles.resultSource}>{result.uri}</p>
+            <p className={styles.snippet}>{formatSnippet(result.summary || result.content)}</p>
+            {result.code ? <pre className={styles.codeSnippet}>{result.code}</pre> : null}
+            <dl className={styles.metadataList}>
+              <div>
+                <dt>Keyword</dt>
+                <dd>{result.keyword_score.toFixed(3)}</dd>
+              </div>
+              <div>
+                <dt>Vector</dt>
+                <dd>{result.vector_score.toFixed(3)}</dd>
+              </div>
+            </dl>
+          </article>
+        )
+      })}
     </div>
   )
 }
@@ -403,6 +407,10 @@ function numberValue(value: unknown) {
 
 function formatSourceCount(count: number) {
   return `${count} ${count === 1 ? 'source' : 'sources'}`
+}
+
+function formatIndexedSourceCount(count: number) {
+  return `${count} indexed ${count === 1 ? 'source' : 'sources'}`
 }
 
 function clampSearchLimit(value: number) {

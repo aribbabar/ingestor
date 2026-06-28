@@ -146,6 +146,9 @@ export function SettingsPage({
       : !hasOllamaModels
         ? `Ollama is running at ${ollamaModels?.base_url}, but no models are installed. Pull an embedding model such as nomic-embed-text to enable Ollama-backed search.`
         : `Ollama is available at ${ollamaModels?.base_url}. Select one of the installed models only if you want new indexes to use Ollama embeddings.`
+  const staleSourceWarningText = `${formatIndexedSourceCount(staleSourceCount)} must be re-indexed before search.`
+  const effectiveBatchSizeText = `Effective batch size: ${effectiveBatchSizeLabel}. Default: ${defaultIndexingStrategy} / ${defaultBatchSize}.`
+  const batchSizeErrorText = `Batch size must be a whole number from ${MIN_BATCH_SIZE} to ${MAX_BATCH_SIZE}.`
 
   function resetDraftToDefaults() {
     setIsResetPending(true)
@@ -248,9 +251,7 @@ export function SettingsPage({
             </div>
             <p className={isOllamaReachable && hasOllamaModels ? styles.rowNote : styles.ollamaNotice}>{ollamaStatusText}</p>
             {staleSourceCount ? (
-              <p className={styles.warningText}>
-                {staleSourceCount} indexed source{staleSourceCount === 1 ? '' : 's'} must be re-indexed before search.
-              </p>
+              <p className={styles.warningText}>{staleSourceWarningText}</p>
             ) : null}
           </div>
 
@@ -258,10 +259,7 @@ export function SettingsPage({
             <div className={styles.rowCopy}>
               <label htmlFor="indexing-strategy">Embedding indexing</label>
               <p>Tune how new indexes send chunks to the embedding provider.</p>
-              <span>
-                Effective batch size: {effectiveBatchSizeLabel}. Default:{' '}
-                {defaultIndexingStrategy} / {defaultBatchSize}.
-              </span>
+              <span>{effectiveBatchSizeText}</span>
             </div>
             <div className={styles.indexingControls}>
               <SelectControl
@@ -285,7 +283,7 @@ export function SettingsPage({
               />
             </div>
             {!isBatchSizeValid ? (
-              <p className={styles.errorText}>Batch size must be a whole number from {MIN_BATCH_SIZE} to {MAX_BATCH_SIZE}.</p>
+              <p className={styles.errorText}>{batchSizeErrorText}</p>
             ) : null}
           </div>
 

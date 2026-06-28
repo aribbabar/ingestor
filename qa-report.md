@@ -53,6 +53,11 @@ Header and recent-source fixes from this pass:
 - **USA-7 from the fresh QA report:** The backend status pill now renders capitalized status text, so assistive output reports `Online`, `Checking`, or `Offline` instead of lowercase raw state.
 - **UX-9 from the fresh QA report:** Recent source rows now expose an explicit `Open {source.name} in Sources` action with a visible Open affordance.
 
+Accessibility text and settings-load fixes from this pass:
+
+- **UX-4:** Reworked the reported split-text locations with coherent strings or `aria-label`s: Capture index counts, ready-source counts, search source sizes, Settings stale/indexing/error text, Sources stale warnings, and search result labels.
+- **PERF-2:** `loadSettingsBundle()` no longer waits on `/api/health`; Settings now loads from `/api/settings` directly while optional Ollama and skill checks remain separately timeout-protected.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -70,8 +75,10 @@ Verification run after the fixes:
 | Browser verification at `http://127.0.0.1:1420/#/capture` web tab | Pass: Index website action appears before expanded Advanced crawl options and the advanced fields remain visible below it |
 | Browser verification at `http://127.0.0.1:1420/#/sources` at 980px viewport | Pass: source location uses hidden overflow/ellipsis/nowrap and focused source row shows an accent focus ring |
 | Browser verification at `http://127.0.0.1:1420/#/capture` recent sources | Pass: header status is exposed as `Online`; Recent source action reads `Open test-docs in Sources` and navigates to the selected source on `/sources` |
+| Source inspection for UX-4 reported locations | Pass: reported text fragments now use coherent strings or explicit `aria-label`s |
+| `rg -n "/api/health|HealthResponse" frontend\src\api.ts` | Pass: no health dependency remains in `loadSettingsBundle()` |
 
-Still open from this report: UX-4 and the remaining lower-priority cleanup/performance items.
+Still open from this report: the remaining lower-priority cleanup/performance items, excluding PERF-2 from the fresh report.
 
 ---
 

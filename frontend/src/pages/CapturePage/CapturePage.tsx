@@ -99,6 +99,13 @@ export function CapturePage({
   const isPickingLocalPath = isPickingFolder || isPickingFiles;
   const lastLogLine = latestLogLine(activeLogs);
   const recentLogLines = latestLogLines(activeLogs, 4);
+  const selectedDocumentType = selectedSource?.kind === "web" ? "pages" : "docs";
+  const selectedDocumentCountLabel = selectedSource
+    ? `${selectedSource.document_count} ${selectedDocumentType}`
+    : "";
+  const selectedChunkCountLabel = selectedSource
+    ? `${selectedSource.chunk_count} chunks`
+    : "";
 
   function openSource(sourceId: string) {
     onSelectSource(sourceId);
@@ -361,14 +368,14 @@ export function CapturePage({
                 </strong>
                 <span>{selectedSource.name}</span>
               </div>
-              <div className={styles.progressStats} aria-label="Index counts">
-                <span>
-                  <strong>{selectedSource.document_count}</strong>
-                  {selectedSource.kind === "web" ? "pages" : "docs"}
+              <div className={styles.progressStats} aria-label={`Index counts: ${selectedDocumentCountLabel}, ${selectedChunkCountLabel}`}>
+                <span aria-label={selectedDocumentCountLabel}>
+                  <strong aria-hidden="true">{selectedSource.document_count}</strong>
+                  <span aria-hidden="true">{selectedDocumentType}</span>
                 </span>
-                <span>
-                  <strong>{selectedSource.chunk_count}</strong>
-                  chunks
+                <span aria-label={selectedChunkCountLabel}>
+                  <strong aria-hidden="true">{selectedSource.chunk_count}</strong>
+                  <span aria-hidden="true">chunks</span>
                 </span>
               </div>
             </div>
@@ -434,7 +441,7 @@ export function CapturePage({
         <div className={styles.sectionHeading}>
           <div>
             <h2 id="capture-search-title">Search indexed sources</h2>
-            <p>{searchableSources.length ? `${searchableSources.length} source${searchableSources.length === 1 ? "" : "s"} ready` : "No indexed sources ready"}</p>
+            <p>{formatReadySourceCount(searchableSources.length)}</p>
           </div>
           <button
             className={styles.linkButton}
@@ -456,7 +463,7 @@ export function CapturePage({
               >
                 <span>
                   <strong>{source.name}</strong>
-                  <small>{source.document_count} docs, {source.chunk_count} chunks</small>
+                  <small>{formatSourceSize(source)}</small>
                 </span>
                 <Badge value={source.kind} variant={source.kind} />
               </button>
@@ -513,6 +520,15 @@ export function CapturePage({
 
 function latestLogLine(logs: string) {
   return latestLogLines(logs, 1).at(0);
+}
+
+function formatReadySourceCount(count: number) {
+  if (!count) return "No indexed sources ready";
+  return `${count} ${count === 1 ? "source" : "sources"} ready`;
+}
+
+function formatSourceSize(source: SourceRecord) {
+  return `${source.document_count} docs, ${source.chunk_count} chunks`;
 }
 
 function JobProgress({ job }: { job: IndexJob }) {
