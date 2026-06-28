@@ -4,12 +4,15 @@ import fnmatch
 import re
 from urllib.parse import urlparse
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 from app.indexing.content import extract_main_markdown, has_obvious_web_chrome, html_to_markdown
 from app.indexing.documents import document_from_web_page
 
 CRAWL4AI_INSTALL_MESSAGE = "Crawl4AI is not available. Run `pip install -r requirements.txt` in backend."
+CRAWL_PAGE_TIMEOUT_MS = 30_000
+
+CancelCheck = Callable[[], None]
 
 
 async def crawl_web_documents(
@@ -20,6 +23,7 @@ async def crawl_web_documents(
     scope: str,
     include_patterns: list[str] | None = None,
     exclude_patterns: list[str] | None = None,
+    should_cancel: CancelCheck | None = None,
 ) -> list[dict]:
     return [
         document
@@ -30,6 +34,7 @@ async def crawl_web_documents(
             scope=scope,
             include_patterns=include_patterns,
             exclude_patterns=exclude_patterns,
+            should_cancel=should_cancel,
         )
     ]
 
@@ -42,6 +47,7 @@ async def iter_web_documents(
     scope: str,
     include_patterns: list[str] | None = None,
     exclude_patterns: list[str] | None = None,
+    should_cancel: CancelCheck | None = None,
 ) -> AsyncIterator[dict]:
     try:
         async for document in crawl_with_crawl4ai(
@@ -51,6 +57,7 @@ async def iter_web_documents(
             scope=scope,
             include_patterns=include_patterns or [],
             exclude_patterns=exclude_patterns or [],
+            should_cancel=should_cancel,
         ):
             yield document
     except ImportError as exc:
@@ -80,6 +87,7 @@ async def crawl_with_crawl4ai(
     scope: str,
     include_patterns: list[str],
     exclude_patterns: list[str],
+    should_cancel: CancelCheck | None = None,
 ) -> AsyncIterator[dict]:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
     from crawl4ai.content_filter_strategy import PruningContentFilter
@@ -119,24 +127,34 @@ async def crawl_with_crawl4ai(
             ),
             options={"citations": True},
         ),
+        page_timeout=CRAWL_PAGE_TIMEOUT_MS,
         stream=True,
         word_count_threshold=5,
         excluded_tags=["nav", "footer", "header"],
         exclude_external_links=True,
         exclude_social_media_links=True,
+        max_retries=0,
     )
     browser_config = BrowserConfig(headless=True, text_mode=True, verbose=False)
 
     async with AsyncWebCrawler(config=browser_config) as crawler:
+        check_cancelled(should_cancel)
         stream = await crawler.arun(url=url, config=run_config)
         async for result in stream:
+            check_cancelled(should_cancel)
             result_url = getattr(result, "url", "")
             if not should_index_url(result_url, include_patterns, exclude_patterns):
                 continue
             markdown = markdown_from_result(result)
             document = document_from_web_page(result_url, markdown, title=result.metadata.get("title") if result.metadata else None)
             if document:
+                check_cancelled(should_cancel)
                 yield document
+
+
+def check_cancelled(should_cancel: CancelCheck | None) -> None:
+    if should_cancel:
+        should_cancel()
 
 
 def should_index_url(url: str, include_patterns: list[str], exclude_patterns: list[str]) -> bool:

@@ -28,6 +28,7 @@ from app.domain.models import (
 logger = logging.getLogger(__name__)
 active_job_ids: set[str] = set()
 active_jobs_lock = threading.Lock()
+CANCELLATION_PENDING_MESSAGE = "Cancellation requested. Waiting for the current page fetch to finish."
 
 
 class IndexCancelled(RuntimeError):
@@ -338,8 +339,8 @@ def cancel_index_job(job_id: str) -> JobRecord | None:
         log(job, "Indexing cancelled")
         mark_source_cancelled(job.source_id)
         return db.update_job(job, JobStatus.CANCELLED, "Indexing cancelled.")
-    log(job, "Cancellation requested")
-    return db.update_job(job, JobStatus.CANCELLING, "Cancellation requested")
+    log(job, CANCELLATION_PENDING_MESSAGE)
+    return db.update_job(job, JobStatus.CANCELLING, CANCELLATION_PENDING_MESSAGE)
 
 
 def _run_job(source_id: str, job: JobRecord) -> None:
@@ -400,6 +401,7 @@ async def index_web_source_incrementally(source: SourceRecord, job: JobRecord | 
         scope=str(source.metadata.get("scope", "hostname")),
         include_patterns=list(source.metadata.get("include_patterns", [])),
         exclude_patterns=list(source.metadata.get("exclude_patterns", [])),
+        should_cancel=lambda: ensure_job_not_cancelled(job),
     ):
         ensure_job_not_cancelled(job)
         indexed = db.add_source_document(source, document)

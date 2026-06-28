@@ -295,6 +295,37 @@ class CrawlMarkdownSelectionTests(TestCase):
         finally:
             crawler_module.crawl_with_crawl4ai = original_crawler
 
+    def test_iter_web_documents_passes_cancel_check_to_crawler(self) -> None:
+        original_crawler = crawler_module.crawl_with_crawl4ai
+        cancel_checks = 0
+
+        def should_cancel() -> None:
+            nonlocal cancel_checks
+            cancel_checks += 1
+
+        async def fake_crawler(*_args, **kwargs):
+            kwargs["should_cancel"]()
+            if False:
+                yield {}
+
+        async def collect() -> None:
+            async for _document in crawler_module.iter_web_documents(
+                "https://example.com/docs",
+                max_depth=1,
+                max_pages=1,
+                scope="hostname",
+                should_cancel=should_cancel,
+            ):
+                pass
+
+        try:
+            crawler_module.crawl_with_crawl4ai = fake_crawler
+            asyncio.run(collect())
+        finally:
+            crawler_module.crawl_with_crawl4ai = original_crawler
+
+        self.assertEqual(cancel_checks, 1)
+
     def test_markdown_from_result_prefers_fit_markdown(self) -> None:
         class Markdown:
             fit_markdown = "# Focused content\n\nUseful body."
@@ -591,6 +622,7 @@ class VectorIndexTests(TestCase):
 
                 self.assertIsNotNone(cancelled)
                 self.assertEqual(cancelled.status, JobStatus.CANCELLING)
+                self.assertEqual(cancelled.message, source_service.CANCELLATION_PENDING_MESSAGE)
                 self.assertEqual(test_db.find_running_job_for_source(source.id).id, job.id)
                 with self.assertRaises(source_service.IndexCancelled):
                     source_service.ensure_job_not_cancelled(job)

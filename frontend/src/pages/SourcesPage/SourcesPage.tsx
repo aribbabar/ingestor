@@ -168,14 +168,19 @@ export function SourcesPage({
                       {isReindexing ? 'Indexing' : 'Reindex'}
                     </button>
                     {sourceJob && isActiveJob(sourceJob) ? (
-                      <button
-                        className={styles.dangerButton}
-                        disabled={sourceJob.status === 'cancelling'}
-                        onClick={() => void onCancelJob(sourceJob)}
-                        type="button"
-                      >
-                        {sourceJob.status === 'cancelling' ? 'Cancelling' : 'Cancel'}
-                      </button>
+                      <>
+                        <button
+                          className={styles.dangerButton}
+                          disabled={sourceJob.status === 'cancelling'}
+                          onClick={() => void onCancelJob(sourceJob)}
+                          type="button"
+                        >
+                          {sourceJob.status === 'cancelling' ? 'Cancelling' : 'Cancel'}
+                        </button>
+                        {sourceJob.status === 'cancelling' ? (
+                          <span className={styles.sourceNote}>Finishing current page</span>
+                        ) : null}
+                      </>
                     ) : null}
                     <button
                       className={styles.dangerButton}

@@ -240,6 +240,12 @@
   justify-content: flex-end;
 }
 
+.sourceNote {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
 .searchForm {
   align-items: end;
   display: grid;

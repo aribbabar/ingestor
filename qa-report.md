@@ -83,6 +83,10 @@ Search feedback and Capture progress-state fixes from this pass:
 - **UX-5 / UX-7 from the fresh QA report:** The Sources search submit button now shows a spinning loader icon while `isSearching` is true, while preserving the existing result-retention behavior.
 - **USA-4 from the fresh QA report:** Capture now renders progress only when the latest job belongs to the selected source, so a deleted or transiently missing source falls back to the empty progress state instead of a stale progress bar.
 
+Web-crawl cancellation mitigation from this pass:
+
+- **USA-3 / PERF-5 from the fresh QA report:** Web crawl cancellation remains cooperative, but the crawler now applies a 30 second per-page timeout, checks the cancellation hook before and between streamed pages, and surfaces clearer UI/job text that cancellation waits for the current page fetch to finish.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -120,8 +124,12 @@ Verification run after the fixes:
 | Browser verification at `http://127.0.0.1:1420/#/capture` progress panel | Pass: progress rendered for the selected source's matching job |
 | Source inspection for route Error Boundary | Pass: `App.tsx` wraps the route surface with `RouteErrorBoundary`, which provides a Reload recovery action |
 | Source inspection for Capture cancel action | Pass: Capture exposes `Cancel indexing` for the selected active job |
+| `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (36 tests) |
+| Source inspection for `backend\app\indexing\crawler.py` crawl timeout and cancellation checks | Pass: Crawl4AI uses a 30 second page timeout and checks cancellation before/between streamed pages |
+| Source inspection for cancellation UI text | Pass: Capture and Sources explain that cancelling finishes the current page fetch before stopping |
+| Browser verification at `http://127.0.0.1:1420/#/capture` and `/sources` | Pass: Capture and Sources render cleanly after the cancellation messaging changes |
 
-Still open from this report: the remaining lower-priority cleanup/performance items, excluding old CODE-3, old CODE-6, old UX-5, old USA-3, USA-4, USA-5, PERF-1, PERF-2, PERF-3, PERF-6, CODE-3, CODE-7, and CODE-9 from the fresh report.
+Still open from this report: the remaining lower-priority cleanup/performance items, excluding old CODE-3, old CODE-6, old UX-5, old USA-3, USA-4, USA-5, PERF-1, PERF-2, PERF-3, PERF-5, PERF-6, CODE-3, CODE-7, and CODE-9 from the fresh report.
 
 ---
 
@@ -293,7 +301,7 @@ The search form has `required` on the query input, so submitting an empty query 
 
 ### USA-3: No way to cancel a web crawl from the Capture page [Low]
 
-Follow-up found this older finding is stale. The Capture progress panel now exposes `Cancel indexing` when the selected source has an active job. The separate fresh finding about slow cooperative cancellation inside the web crawler remains open as USA-3 / PERF-5 in `qa-evaluation-2026-06-27.md`.
+Follow-up found this older finding is stale. The Capture progress panel now exposes `Cancel indexing` when the selected source has an active job. The separate fresh finding about slow cooperative cancellation inside the web crawler has been mitigated with a 30 second page timeout and clearer cancellation messaging; hard-kill cancellation remains deferred.
 
 ---
 

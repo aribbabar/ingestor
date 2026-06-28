@@ -606,8 +606,15 @@
 }
 
 .progressActions {
+  align-items: center;
   display: flex;
+  gap: var(--space-4);
   justify-content: flex-start;
+}
+
+.cancelNote {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
 }
 
 .logLine {

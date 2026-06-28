@@ -84,6 +84,10 @@ Search feedback and Capture progress-state fixes from this pass:
 - **UX-7:** The Sources search submit button now shows a spinning loader icon while `isSearching` is true, while preserving the existing result-retention behavior.
 - **USA-4:** Capture now renders progress only when the latest job belongs to the selected source, so a deleted or transiently missing source falls back to the empty progress state instead of a stale progress bar.
 
+Web-crawl cancellation mitigation from this pass:
+
+- **USA-3 / PERF-5:** Web crawl cancellation remains cooperative, but the crawler now applies a 30 second per-page timeout, checks the cancellation hook before and between streamed pages, and surfaces clearer UI/job text that cancellation waits for the current page fetch to finish.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -120,8 +124,12 @@ Verification run after the fixes:
 | Browser verification at `http://127.0.0.1:1420/#/sources` search panel | Pass: search button rendered with stable inline-flex layout and settled search results rendered |
 | Browser verification at `http://127.0.0.1:1420/#/capture` progress panel | Pass: progress rendered for the selected source's matching job |
 | Source inspection for route Error Boundary | Pass: `App.tsx` wraps the route surface with `RouteErrorBoundary`, which provides a Reload recovery action |
+| `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (36 tests) |
+| Source inspection for `backend\app\indexing\crawler.py` crawl timeout and cancellation checks | Pass: Crawl4AI uses a 30 second page timeout and checks cancellation before/between streamed pages |
+| Source inspection for cancellation UI text | Pass: Capture and Sources explain that cancelling finishes the current page fetch before stopping |
+| Browser verification at `http://127.0.0.1:1420/#/capture` and `/sources` | Pass: Capture and Sources render cleanly after the cancellation messaging changes |
 
-Still open from this report: USA-3, USA-6, PERF-5, and CODE-10.
+Still open from this report: USA-6 and CODE-10. Hard-kill web crawl cancellation remains deferred unless slow or hung crawls become a real issue.
 
 ---
 
@@ -336,7 +344,7 @@ When a local folder is added then its files change on disk, the user has no sign
 
 `index_web_source_incrementally` (`service.py:330-362`) calls `ensure_job_not_cancelled(job)` only between yielded documents. The actual crawl in `crawler.py:115-124` iterates `async for result in stream:` without consulting a cancellation flag. If a crawl is in the middle of fetching a slow page, the user clicks Cancel, the UI updates to "Cancelling", but the worker thread stays blocked until the page resolves (which for a hung server can take minutes, or never).
 
-**Recommendation:** Inject a cancellation token into the crawler (e.g., `asyncio.Event` or `asyncio.CancelledError`) and check it before each request, or expose a hard-kill that closes the underlying `httpx` connection.
+**Follow-up:** Mitigated. The Crawl4AI run config now uses a 30 second per-page timeout, cancellation is checked before the crawl and between streamed page results, and the UI/job text explains that cancellation waits for the current page fetch to finish. Full hard-kill cancellation remains deferred.
 
 ---
 
@@ -408,7 +416,7 @@ Native `<input type="number" min={1} max={50}>` automatically disables the down 
 
 ### PERF-5 — Web-crawl cancellation is co-operative only  [Medium]
 
-Already noted as USA-3 from a UX angle; from a reliability angle the lack of a hard-kill on the underlying network requests means a hung crawl can pin a worker thread indefinitely. With one worker thread per active job (`service.py:254`), a single bad URL can effectively block that source from ever finishing.
+Already noted as USA-3 from a UX angle; from a reliability angle the lack of a hard-kill on the underlying network requests means a hung crawl can pin a worker thread. Follow-up mitigation bounds ordinary stuck page fetches with a 30 second Crawl4AI page timeout and clearer cancellation messaging. Full hard-kill cancellation remains deferred.
 
 ---
 
@@ -526,7 +534,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | UX-3   | Source button accessible name is ~100 chars (path + embedding + date + duration + strategy)         | Add `aria-label="Select {source.name}"` on `SourcesPage.tsx:116`.                                                                                                                                    |
 | UX-5   | Settings Reset has no "pending" visual indicator                                                    | Add an explicit "Resetting to defaults" banner with a Cancel link, or split Reset into an immediate confirm-and-apply action.                                                                       |
 | USA-1  | Reset vs draft vs save mental model unclear                                                          | Separate "Reset to defaults" from draft field edits. Use a confirmation dialog.                                                                                                                       |
-| USA-3  | Web-crawl cancellation is co-operative only and may not return promptly                              | Inject cancellation token into the crawler; check before each fetch; expose a hard-kill that closes the underlying client.                                                                          |
+| USA-3  | Web-crawl cancellation is co-operative only and may not return promptly                              | Mitigated: 30 second page timeout, between-page cancellation checks, and clearer cancellation messaging. Hard-kill cancellation deferred.                                                          |
 | PERF-1 | Fixed 1.5 s polling with no backoff; polling stops entirely after job end                            | Addressed: adaptive polling backs off after unchanged progress and keeps a short post-job refresh window.                                                                                           |
 | PERF-2 | `loadSettingsBundle` has no timeout; can stall the initial UI on a slow backend                      | Apply the 3500 ms timeout used for optional Ollama / skills loads.                                                                                                                                    |
 | PERF-4 | tkinter-based folder picker endpoints are thread-unsafe and headless-fragile                        | Addressed: endpoints are deprecated browser-dev fallbacks with clearer unavailable-environment errors.                                                                                            |
@@ -549,7 +557,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | USA-6  | Spinner button states at min/max are subtle                                                     | No change required.                                                                                                                                              |
 | USA-7  | Status pill text is lowercase                                                                    | Render the title-case label and visually style the dot.                                                                                                         |
 | PERF-3 | `embed_text_with_local_hashing` returns zero vector for empty input                            | Addressed: tokenless queries now short-circuit in `vector_search`.                                                                                              |
-| PERF-5 | Web-crawl cancellation is co-operative only                                                      | See USA-3.                                                                                                                                                      |
+| PERF-5 | Web-crawl cancellation is co-operative only                                                      | Mitigated; see USA-3.                                                                                                                                           |
 | PERF-6 | Single-threaded SQLite plus heavy writes during indexing                                       | Addressed: WAL mode was verified and documented at both SQLite connection setup points.                                                                       |
 | CODE-2 | Dead `App.css` file                                                                             | Delete or migrate.                                                                                                                                              |
 | CODE-3 | Redundant DELETE / POST delete endpoints                                                        | Addressed: DELETE is documented as canonical for CLI/REST; POST compatibility endpoint is deprecated.                                                           |

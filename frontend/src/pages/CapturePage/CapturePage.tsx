@@ -420,6 +420,9 @@ export function CapturePage({
                 >
                   {progressJob.status === "cancelling" ? "Cancelling" : "Cancel indexing"}
                 </button>
+                {progressJob.status === "cancelling" ? (
+                  <span className={styles.cancelNote}>Finishing the current page fetch before stopping.</span>
+                ) : null}
               </div>
             ) : null}
             {selectedSource.error || lastLogLine ? (
