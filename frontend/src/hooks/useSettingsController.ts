@@ -36,6 +36,7 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
   const [startupSettings, setStartupSettings] = useState<StartupSettings | null>(null)
   const [cliPathSettings, setCliPathSettings] = useState<CliPathSettings | null>(null)
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null)
+  const [updateMessage, setUpdateMessage] = useState<Message>(null)
   const [ollamaModels, setOllamaModels] = useState<OllamaModelsResponse | null>(null)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [isSyncingSkills, setIsSyncingSkills] = useState(false)
@@ -224,37 +225,35 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
 
   const checkForUpdates = useCallback(async () => {
     if (!window.ingestorDesktop) return
+    setUpdateMessage(null)
     setIsCheckingUpdate(true)
     try {
       const nextStatus = await window.ingestorDesktop.checkForUpdate()
       setUpdateStatus(nextStatus)
-      showMessage('settings', {
-        text: nextStatus.available ? `Ingestor ${nextStatus.version} is available` : 'Ingestor is up to date',
-        tone: 'success',
-      })
     } catch (error) {
-      showMessage('settings', {
+      setUpdateMessage({
         text: error instanceof Error ? error.message : 'Unable to check for updates',
         tone: 'error',
       })
     } finally {
       setIsCheckingUpdate(false)
     }
-  }, [showMessage])
+  }, [])
 
   const installUpdate = useCallback(async () => {
     if (!window.ingestorDesktop || !updateStatus?.available) return
+    setUpdateMessage(null)
     setIsInstallingUpdate(true)
     try {
       await window.ingestorDesktop.installUpdate()
     } catch (error) {
-      showMessage('settings', {
+      setUpdateMessage({
         text: error instanceof Error ? error.message : 'Unable to install update',
         tone: 'error',
       })
       setIsInstallingUpdate(false)
     }
-  }, [showMessage, updateStatus?.available])
+  }, [updateStatus?.available])
 
   return {
     addCliToPath,
@@ -280,6 +279,7 @@ export function useSettingsController({ showMessage }: UseSettingsControllerOpti
     skillTargets,
     startupSettings,
     syncSkills,
+    updateMessage,
     updateStatus,
   }
 }

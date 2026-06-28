@@ -125,6 +125,7 @@ function App() {
     skillTargets,
     startupSettings,
     syncSkills,
+    updateMessage,
     updateStatus,
   } = settingsController
 
@@ -511,6 +512,7 @@ function App() {
                   startupSettings={startupSettings}
                   cliPathSettings={cliPathSettings}
                   updateStatus={updateStatus}
+                  updateMessage={updateMessage}
                   message={settingsMessage}
                   ollamaModels={ollamaModels}
                   isDesktopAvailable={Boolean(window.ingestorDesktop)}

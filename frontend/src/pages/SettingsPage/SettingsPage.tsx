@@ -22,6 +22,7 @@ type SettingsPageProps = {
   startupSettings: StartupSettings | null
   cliPathSettings: CliPathSettings | null
   updateStatus: DesktopUpdateStatus | null
+  updateMessage: Message
   message: Message
   ollamaModels: OllamaModelsResponse | null
   isDesktopAvailable: boolean
@@ -72,6 +73,7 @@ export function SettingsPage({
   startupSettings,
   cliPathSettings,
   updateStatus,
+  updateMessage,
   message,
   ollamaModels,
   isDesktopAvailable,
@@ -245,6 +247,7 @@ export function SettingsPage({
             ) : (
               <p className={styles.rowNote}>No update check has run in this session.</p>
             )}
+            <MessageLine message={updateMessage} />
           </div>
         </section>
       ) : null}
