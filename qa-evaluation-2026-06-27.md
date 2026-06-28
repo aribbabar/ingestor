@@ -59,6 +59,11 @@ Accessibility text and settings-load fixes from this pass:
 - **UX-4:** Reworked the reported split-text locations with coherent strings or `aria-label`s: Capture index counts, ready-source counts, search source sizes, Settings stale/indexing/error text, Sources stale warnings, and search result labels.
 - **PERF-2:** `loadSettingsBundle()` no longer waits on `/api/health`; Settings now loads from `/api/settings` directly while optional Ollama and skill checks remain separately timeout-protected.
 
+Crawl dependency and local-hashing fixes from this pass:
+
+- **PERF-3:** Punctuation-only vector queries now skip the vector branch instead of querying with the local-hashing zero vector. Sources search also shows a local-hashing notice explaining that vector-only semantic matches are limited until Ollama embeddings are configured.
+- **CODE-9:** Crawl4AI dependency import failures now surface as a clean `RuntimeError` with the missing module detail instead of leaking raw import tracebacks from crawl execution.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -66,7 +71,9 @@ Verification run after the fixes:
 | `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k missing_local_snapshot` | Pass |
 | `backend\.venv\Scripts\python.exe -m compileall backend\app` | Pass |
 | `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k "missing_local_snapshot or refreshes_snapshot"` | Pass |
-| `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (33 tests) |
+| `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k crawl4ai_dependency_import_errors` | Pass |
+| `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k vector_search_skips_queries_without_tokens` | Pass |
+| `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (35 tests) |
 | `npm --prefix frontend run lint` | Pass |
 | `npm --prefix frontend run build` | Pass |
 | Browser verification at `http://127.0.0.1:1420/#/settings` | Pass: Reset banner, confirmation dialog, cancel path, and Settings render verified |
@@ -78,8 +85,9 @@ Verification run after the fixes:
 | Browser verification at `http://127.0.0.1:1420/#/capture` recent sources | Pass: header status is exposed as `Online`; Recent source action reads `Open test-docs in Sources` and navigates to the selected source on `/sources` |
 | Source inspection for UX-4 reported locations | Pass: reported text fragments now use coherent strings or explicit `aria-label`s |
 | `rg -n "/api/health|HealthResponse" frontend\src\api.ts` | Pass: no health dependency remains in `loadSettingsBundle()` |
+| Browser verification at `http://localhost:1420/#/sources` | Pass: local-hashing search-quality notice rendered |
 
-Still open from this report: USA-3 through USA-6, PERF-1, PERF-3 through PERF-6, and CODE-3, CODE-7, CODE-9, and CODE-10.
+Still open from this report: USA-3 through USA-6, PERF-1, PERF-4 through PERF-6, and CODE-3, CODE-7, and CODE-10.
 
 ---
 
@@ -506,7 +514,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | USA-5  | Capture page log context lost when navigating away                                              | Persist `activeLogs` keyed by job id and rehydrate on revisit.                                                                                                  |
 | USA-6  | Spinner button states at min/max are subtle                                                     | No change required.                                                                                                                                              |
 | USA-7  | Status pill text is lowercase                                                                    | Render the title-case label and visually style the dot.                                                                                                         |
-| PERF-3 | `embed_text_with_local_hashing` returns zero vector for empty input                            | Short-circuit empty text in `vector_search` to skip the vector branch.                                                                                          |
+| PERF-3 | `embed_text_with_local_hashing` returns zero vector for empty input                            | Addressed: tokenless queries now short-circuit in `vector_search`.                                                                                              |
 | PERF-5 | Web-crawl cancellation is co-operative only                                                      | See USA-3.                                                                                                                                                      |
 | PERF-6 | Single-threaded SQLite plus heavy writes during indexing                                       | Document the isolation level; consider WAL mode if not already enabled (verify in `database.py`).                                                              |
 | CODE-2 | Dead `App.css` file                                                                             | Delete or migrate.                                                                                                                                              |
@@ -515,7 +523,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | CODE-6 | `Number("")` unguarded in spinner onChange                                                      | See BUG-5.                                                                                                                                                      |
 | CODE-7 | Failed sources excluded from `searchableSources` with no error message                          | Show a one-line "Source needs reindex to be searchable" hint on the Capture page when there are sources in `failed` state.                                       |
 | CODE-8 | Reindex always reads the snapshot, never re-snapshots                                           | Detect mtime/hash differences and re-snapshot before indexing on Reindex.                                                                                      |
-| CODE-9 | `iter_web_documents` may surface confusing errors when crawl4ai is half-installed                | Improve the error message; consider a feature-detect at startup.                                                                                               |
+| CODE-9 | `iter_web_documents` may surface confusing errors when crawl4ai is half-installed                | Addressed: dependency import failures are wrapped with a clean missing-module message.                                                                          |
 
 ---
 

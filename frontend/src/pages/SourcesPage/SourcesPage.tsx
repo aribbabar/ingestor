@@ -74,6 +74,7 @@ export function SourcesPage({
   const staleCount = sources.filter((source) => source.status === 'indexed' && !isSourceQueryable(source, settings)).length
   const staleWarningText = `${formatIndexedSourceCount(staleCount)} must be re-indexed before search or agent retrieval.`
   const selectedSourceQueryable = isSourceQueryable(selectedSource, settings)
+  const isUsingLocalHashing = settings?.embedding.provider === 'local-hashing'
   const selectedSourceJob = selectedSource ? jobs.find((job) => job.source_id === selectedSource.id) : undefined
   const isSelectedSourceReindexing = Boolean(
     selectedSource &&
@@ -210,6 +211,11 @@ export function SourcesPage({
                 View indexing progress in the registry.
               </button>
             ) : null}
+          </div>
+        ) : null}
+        {isUsingLocalHashing ? (
+          <div className={styles.searchNotice}>
+            Built-in local hashing is active. Keyword and hybrid search still work, but vector-only semantic matches are limited until Ollama embeddings are configured.
           </div>
         ) : null}
         <form className={styles.searchForm} onSubmit={onSearchDocs}>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import sys
@@ -13,6 +14,7 @@ from pydantic import ValidationError
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import app.retrieval.search as search_module
+import app.indexing.crawler as crawler_module
 from app.indexing.crawler import markdown_from_result
 from app.db import Database
 from app.retrieval.embeddings import embedding_signature, tokenize
@@ -270,6 +272,29 @@ Use the settings page.
 
 
 class CrawlMarkdownSelectionTests(TestCase):
+    def test_iter_web_documents_wraps_crawl4ai_dependency_import_errors(self) -> None:
+        original_crawler = crawler_module.crawl_with_crawl4ai
+
+        async def broken_crawler(*_args, **_kwargs):
+            raise ModuleNotFoundError("No module named 'fake_dependency'", name="fake_dependency")
+            yield {}
+
+        async def collect() -> None:
+            async for _document in crawler_module.iter_web_documents(
+                "https://example.com/docs",
+                max_depth=1,
+                max_pages=1,
+                scope="hostname",
+            ):
+                pass
+
+        try:
+            crawler_module.crawl_with_crawl4ai = broken_crawler
+            with self.assertRaisesRegex(RuntimeError, "Crawl4AI is not available.*fake_dependency"):
+                asyncio.run(collect())
+        finally:
+            crawler_module.crawl_with_crawl4ai = original_crawler
+
     def test_markdown_from_result_prefers_fit_markdown(self) -> None:
         class Markdown:
             fit_markdown = "# Focused content\n\nUseful body."
@@ -728,6 +753,18 @@ class VectorIndexTests(TestCase):
                 rebuilt_db.engine.dispose()
 
         self.assertEqual(vec_count, 1)
+
+    def test_vector_search_skips_queries_without_tokens(self) -> None:
+        original_embed_text = search_module.embed_text
+
+        def fail_embed_text(_query: str) -> list[float]:
+            raise AssertionError("punctuation-only queries should not be embedded")
+
+        try:
+            search_module.embed_text = fail_embed_text
+            self.assertEqual(search_module.vector_search("?!", None, 5), {})
+        finally:
+            search_module.embed_text = original_embed_text
 
 
 class RetrievalContextTests(TestCase):

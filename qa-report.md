@@ -58,6 +58,11 @@ Accessibility text and settings-load fixes from this pass:
 - **UX-4:** Reworked the reported split-text locations with coherent strings or `aria-label`s: Capture index counts, ready-source counts, search source sizes, Settings stale/indexing/error text, Sources stale warnings, and search result labels.
 - **PERF-2:** `loadSettingsBundle()` no longer waits on `/api/health`; Settings now loads from `/api/settings` directly while optional Ollama and skill checks remain separately timeout-protected.
 
+Crawl dependency and local-hashing fixes from this pass:
+
+- **CODE-9 from the fresh QA report:** Crawl4AI dependency import failures now surface as a clean `RuntimeError` with the missing module detail instead of leaking raw import tracebacks from crawl execution.
+- **PERF-3:** Sources search now shows a local-hashing notice explaining that vector-only semantic matches are limited until Ollama embeddings are configured. Punctuation-only vector queries also skip the vector branch instead of querying with a zero vector.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -65,7 +70,9 @@ Verification run after the fixes:
 | `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k missing_local_snapshot` | Pass |
 | `backend\.venv\Scripts\python.exe -m compileall backend\app` | Pass |
 | `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k "missing_local_snapshot or refreshes_snapshot"` | Pass |
-| `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (33 tests) |
+| `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k crawl4ai_dependency_import_errors` | Pass |
+| `backend\.venv\Scripts\python.exe -m pytest tests\test_ingestion_and_search.py -k vector_search_skips_queries_without_tokens` | Pass |
+| `backend\.venv\Scripts\python.exe -m pytest tests` | Pass (35 tests) |
 | `npm --prefix frontend run lint` | Pass |
 | `npm --prefix frontend run build` | Pass |
 | Browser verification at `http://127.0.0.1:1420/#/settings` | Pass: Reset banner, confirmation dialog, cancel path, and Settings render verified |
@@ -77,8 +84,9 @@ Verification run after the fixes:
 | Browser verification at `http://127.0.0.1:1420/#/capture` recent sources | Pass: header status is exposed as `Online`; Recent source action reads `Open test-docs in Sources` and navigates to the selected source on `/sources` |
 | Source inspection for UX-4 reported locations | Pass: reported text fragments now use coherent strings or explicit `aria-label`s |
 | `rg -n "/api/health|HealthResponse" frontend\src\api.ts` | Pass: no health dependency remains in `loadSettingsBundle()` |
+| Browser verification at `http://localhost:1420/#/sources` | Pass: local-hashing search-quality notice rendered |
 
-Still open from this report: the remaining lower-priority cleanup/performance items, excluding PERF-2 from the fresh report.
+Still open from this report: the remaining lower-priority cleanup/performance items, excluding PERF-2, PERF-3, and CODE-9 from the fresh report.
 
 ---
 
@@ -455,7 +463,7 @@ return () => { cancelled = true; unlisten?.() }
 | USA-2 | Ambiguous "No results yet" state | Distinguish "never searched" from "zero results" |
 | USA-3 | No cancel from Capture page for web crawls | Add cancel button in Capture progress section |
 | USA-4 | No keyboard shortcut indication for search | Add hint text or Enter key affordance |
-| PERF-3 | Low vector score discrimination with local hashing | Add notice when local hashing is active |
+| PERF-3 | Low vector score discrimination with local hashing | Addressed: notice added when local hashing is active |
 | CODE-2 | Dead CSS file `App.css` | Delete or migrate relevant styles |
 | CODE-4 | Redundant delete source endpoints | Remove unused DELETE endpoint |
 | CODE-5 | `sourcePendingDelete` not cleared on error | Review dialog lifecycle on error |

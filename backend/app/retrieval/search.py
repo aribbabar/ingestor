@@ -381,6 +381,8 @@ def keyword_search(query: str, source_ids: list[str] | None, limit: int) -> dict
 def vector_search(query: str, source_ids: list[str] | None, limit: int) -> dict[int, float]:
     if source_ids == []:
         return {}
+    if not tokenize(query):
+        return {}
     try:
         query_vector = embed_text(query)
     except EmbeddingError:

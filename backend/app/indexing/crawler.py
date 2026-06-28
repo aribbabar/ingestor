@@ -9,6 +9,8 @@ from collections.abc import AsyncIterator
 from app.indexing.content import extract_main_markdown, has_obvious_web_chrome, html_to_markdown
 from app.indexing.documents import document_from_web_page
 
+CRAWL4AI_INSTALL_MESSAGE = "Crawl4AI is not available. Run `pip install -r requirements.txt` in backend."
+
 
 async def crawl_web_documents(
     url: str,
@@ -52,9 +54,22 @@ async def iter_web_documents(
         ):
             yield document
     except ImportError as exc:
-        raise RuntimeError(
-            "Crawl4AI is not installed. Run `pip install -r requirements.txt` in backend."
-        ) from exc
+        raise crawl4ai_dependency_error(exc) from exc
+
+
+def crawl4ai_dependency_error(exc: ImportError) -> RuntimeError:
+    detail = dependency_error_detail(exc)
+    message = CRAWL4AI_INSTALL_MESSAGE
+    if detail:
+        message = f"{message} Dependency error: {detail}."
+    return RuntimeError(message)
+
+
+def dependency_error_detail(exc: ImportError) -> str:
+    module_name = getattr(exc, "name", None)
+    if module_name:
+        return f"missing Python module `{module_name}`"
+    return str(exc).strip()
 
 
 async def crawl_with_crawl4ai(
