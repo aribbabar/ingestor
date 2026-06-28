@@ -63,6 +63,11 @@ Crawl dependency and local-hashing fixes from this pass:
 - **CODE-9 from the fresh QA report:** Crawl4AI dependency import failures now surface as a clean `RuntimeError` with the missing module detail instead of leaking raw import tracebacks from crawl execution.
 - **PERF-3:** Sources search now shows a local-hashing notice explaining that vector-only semantic matches are limited until Ollama embeddings are configured. Punctuation-only vector queries also skip the vector branch instead of querying with a zero vector.
 
+Polling and Capture search-state fixes from this pass:
+
+- **PERF-1:** Active job polling now adapts from the fast 1.5 second cadence to a slower 4.5 second cadence after repeated unchanged job progress, and keeps refreshing briefly after a selected job finishes.
+- **CODE-7 from the fresh QA report:** Capture now surfaces failed or stale sources that cannot be searched, with an Open Sources action instead of silently hiding them from the searchable list.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -85,8 +90,10 @@ Verification run after the fixes:
 | Source inspection for UX-4 reported locations | Pass: reported text fragments now use coherent strings or explicit `aria-label`s |
 | `rg -n "/api/health|HealthResponse" frontend\src\api.ts` | Pass: no health dependency remains in `loadSettingsBundle()` |
 | Browser verification at `http://localhost:1420/#/sources` | Pass: local-hashing search-quality notice rendered |
+| Source inspection for `frontend\src\hooks\useSourcesController.ts` | Pass: active job polling backs off after unchanged progress and keeps a short post-job refresh window |
+| Browser verification at `http://127.0.0.1:1420/#/capture` with a temporary failed source | Pass: Capture showed the blocked-source hint and Open Sources action; temporary QA source was removed |
 
-Still open from this report: the remaining lower-priority cleanup/performance items, excluding PERF-2, PERF-3, and CODE-9 from the fresh report.
+Still open from this report: the remaining lower-priority cleanup/performance items, excluding PERF-1, PERF-2, PERF-3, CODE-7, and CODE-9 from the fresh report.
 
 ---
 
@@ -448,11 +455,11 @@ return () => { cancelled = true; unlisten?.() }
 | UX-3 | Source button has excessively long accessible name | Set `aria-label` with just the source name |
 | UX-6 | Advanced options push submit button below fold | Sticky submit bar or restructure layout |
 | USA-1 | Ambiguous "Reset" button behavior | Add "Reset pending" indicator or confirmation dialog |
-| PERF-1 | Fixed-interval polling with no backoff | Use adaptive polling or WebSocket/SSE |
+| PERF-1 | Fixed-interval polling with no backoff | Addressed: adaptive polling backs off after unchanged progress and keeps a short post-job refresh window |
 | PERF-2 | `loadSettingsBundle` blocks on slow endpoints | Add timeout or split requests |
 | CODE-1 | Duplicated `jobProgress`/`formatEta` functions | Extract to shared utility module |
 | CODE-3 | tkinter dependency in file picker | Document as browser-only fallback; consider alternatives |
-| CODE-7 | `onBackendStatus` cleanup race condition | Add cancellation flag pattern |
+| CODE-7 | `onBackendStatus` cleanup race condition | Addressed: cancellation guard added |
 
 ### Low
 

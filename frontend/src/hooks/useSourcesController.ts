@@ -18,6 +18,12 @@ type UseSourcesControllerOptions = {
   showMessage: (view: ViewName, message: AppMessage) => void
 }
 
+const ACTIVE_POLL_FAST_MS = 1500
+const ACTIVE_POLL_SLOW_MS = 4500
+const IDLE_POLLS_BEFORE_BACKOFF = 4
+const POST_JOB_REFRESH_MS = 30_000
+const POST_JOB_POLL_MS = 5000
+
 export function useSourcesController({ settings, showMessage }: UseSourcesControllerOptions) {
   const [sources, setSources] = useState<SourceRecord[]>([])
   const [jobs, setJobs] = useState<IndexJob[]>([])
@@ -33,6 +39,9 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
   const [sourcePendingDelete, setSourcePendingDelete] = useState<SourceRecord | null>(null)
   const [reindexingSourceId, setReindexingSourceId] = useState<string | null>(null)
   const hasAppliedDefaultSearchMode = useRef(false)
+  const activePollState = useRef<{ jobId: string; signature: string; idlePolls: number } | null>(null)
+  const completedJobPollWindow = useRef<{ jobId: string; until: number } | null>(null)
+  const activeJobId = useRef<string | null>(null)
 
   const sortedSources = useMemo(
     () =>
@@ -60,6 +69,15 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     () => sortedSources.filter((source) => isSourceQueryable(source, settings)),
     [settings, sortedSources],
   )
+  const blockedSearchSources = useMemo(
+    () =>
+      sortedSources.filter(
+        (source) =>
+          !isSourceQueryable(source, settings) &&
+          (source.status === 'failed' || source.status === 'indexed'),
+      ),
+    [settings, sortedSources],
+  )
 
   const refreshSources = useCallback(async () => {
     const payload = await loadSources()
@@ -83,12 +101,37 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
   }, [])
 
   useEffect(() => {
-    if (!latestJob || !isActiveJob(latestJob)) return
-    const timer = window.setInterval(() => {
-      void refreshSources()
-      void refreshJob(latestJob.id)
-    }, 1500)
-    return () => window.clearInterval(timer)
+    if (!latestJob) return
+
+    const active = isActiveJob(latestJob)
+    if (active) {
+      activeJobId.current = latestJob.id
+      completedJobPollWindow.current = null
+    } else if (activeJobId.current === latestJob.id) {
+      if (completedJobPollWindow.current?.jobId !== latestJob.id) {
+        completedJobPollWindow.current = {
+          jobId: latestJob.id,
+          until: Date.now() + POST_JOB_REFRESH_MS,
+        }
+      }
+      activeJobId.current = null
+    }
+
+    if (!active) {
+      const windowState = completedJobPollWindow.current
+      if (!windowState || windowState.jobId !== latestJob.id || Date.now() >= windowState.until) {
+        if (windowState?.jobId === latestJob.id) completedJobPollWindow.current = null
+        return
+      }
+    }
+
+    const poll = active ? activePollInterval(latestJob, activePollState.current) : null
+    if (poll) activePollState.current = poll.state
+    const interval = poll?.interval ?? POST_JOB_POLL_MS
+    const timer = window.setTimeout(() => {
+      void Promise.all([refreshSources(), refreshJob(latestJob.id)])
+    }, interval)
+    return () => window.clearTimeout(timer)
   }, [latestJob, refreshJob, refreshSources])
 
   const applyInitialSearchMode = useCallback((mode: SearchMode) => {
@@ -223,6 +266,7 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     activeLogs,
     applyInitialSearchMode,
     applySavedSearchMode,
+    blockedSearchSources,
     cancelJob,
     clearSearchOutput: () => {
       setSearchOutput(null)
@@ -257,4 +301,41 @@ export function useSourcesController({ settings, showMessage }: UseSourcesContro
     sources,
     startIndexJobForSource,
   }
+}
+
+function activePollInterval(
+  job: IndexJob,
+  current: { jobId: string; signature: string; idlePolls: number } | null,
+) {
+  const signature = jobPollSignature(job)
+  if (!current || current.jobId !== job.id || current.signature !== signature) {
+    return {
+      interval: ACTIVE_POLL_FAST_MS,
+      state: {
+        jobId: job.id,
+        signature,
+        idlePolls: 0,
+      },
+    }
+  }
+
+  const idlePolls = current.idlePolls + 1
+  return {
+    interval: idlePolls >= IDLE_POLLS_BEFORE_BACKOFF ? ACTIVE_POLL_SLOW_MS : ACTIVE_POLL_FAST_MS,
+    state: {
+      jobId: job.id,
+      signature,
+      idlePolls,
+    },
+  }
+}
+
+function jobPollSignature(job: IndexJob) {
+  return [
+    job.status,
+    job.message,
+    job.progress_current,
+    job.progress_total ?? '',
+    job.progress_label,
+  ].join('|')
 }

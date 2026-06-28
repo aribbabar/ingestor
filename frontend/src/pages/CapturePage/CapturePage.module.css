@@ -451,6 +451,23 @@
   text-align: center;
 }
 
+.attentionState {
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  display: flex;
+  font-size: var(--font-size-sm);
+  gap: var(--space-5);
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+}
+
+.attentionState span {
+  min-width: 0;
+}
+
 .progressContent {
   border-top: 1px solid var(--border);
   display: grid;

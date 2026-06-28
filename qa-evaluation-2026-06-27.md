@@ -64,6 +64,11 @@ Crawl dependency and local-hashing fixes from this pass:
 - **PERF-3:** Punctuation-only vector queries now skip the vector branch instead of querying with the local-hashing zero vector. Sources search also shows a local-hashing notice explaining that vector-only semantic matches are limited until Ollama embeddings are configured.
 - **CODE-9:** Crawl4AI dependency import failures now surface as a clean `RuntimeError` with the missing module detail instead of leaking raw import tracebacks from crawl execution.
 
+Polling and Capture search-state fixes from this pass:
+
+- **PERF-1:** Active job polling now adapts from the fast 1.5 second cadence to a slower 4.5 second cadence after repeated unchanged job progress, and keeps refreshing briefly after a selected job finishes.
+- **CODE-7:** Capture now surfaces failed or stale sources that cannot be searched, with an Open Sources action instead of silently hiding them from the searchable list.
+
 Verification run after the fixes:
 
 | Check | Result |
@@ -86,8 +91,10 @@ Verification run after the fixes:
 | Source inspection for UX-4 reported locations | Pass: reported text fragments now use coherent strings or explicit `aria-label`s |
 | `rg -n "/api/health|HealthResponse" frontend\src\api.ts` | Pass: no health dependency remains in `loadSettingsBundle()` |
 | Browser verification at `http://localhost:1420/#/sources` | Pass: local-hashing search-quality notice rendered |
+| Source inspection for `frontend\src\hooks\useSourcesController.ts` | Pass: active job polling backs off after unchanged progress and keeps a short post-job refresh window |
+| Browser verification at `http://127.0.0.1:1420/#/capture` with a temporary failed source | Pass: Capture showed the blocked-source hint and Open Sources action; temporary QA source was removed |
 
-Still open from this report: USA-3 through USA-6, PERF-1, PERF-4 through PERF-6, and CODE-3, CODE-7, and CODE-10.
+Still open from this report: USA-3 through USA-6, PERF-4 through PERF-6, and CODE-3 and CODE-10.
 
 ---
 
@@ -493,7 +500,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | UX-5   | Settings Reset has no "pending" visual indicator                                                    | Add an explicit "Resetting to defaults" banner with a Cancel link, or split Reset into an immediate confirm-and-apply action.                                                                       |
 | USA-1  | Reset vs draft vs save mental model unclear                                                          | Separate "Reset to defaults" from draft field edits. Use a confirmation dialog.                                                                                                                       |
 | USA-3  | Web-crawl cancellation is co-operative only and may not return promptly                              | Inject cancellation token into the crawler; check before each fetch; expose a hard-kill that closes the underlying client.                                                                          |
-| PERF-1 | Fixed 1.5 s polling with no backoff; polling stops entirely after job end                            | Add adaptive backoff; keep polling alive for ~30 s after job completion; consider SSE.                                                                                                              |
+| PERF-1 | Fixed 1.5 s polling with no backoff; polling stops entirely after job end                            | Addressed: adaptive polling backs off after unchanged progress and keeps a short post-job refresh window.                                                                                           |
 | PERF-2 | `loadSettingsBundle` has no timeout; can stall the initial UI on a slow backend                      | Apply the 3500 ms timeout used for optional Ollama / skills loads.                                                                                                                                    |
 | PERF-4 | tkinter-based folder picker endpoints are thread-unsafe and headless-fragile                        | Document the limitation, or replace with a per-platform native invocation, or delete if browser-only access is not a supported use case.                                                            |
 | CODE-1 | `jobProgress` / `formatEta` duplicated in CapturePage and SourcesPage                              | Extract to `frontend/src/utils/jobProgress.ts`.                                                                                                                                                       |
@@ -521,7 +528,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 | CODE-3 | Redundant DELETE / POST delete endpoints                                                        | Remove the unused DELETE endpoint or document it.                                                                                                              |
 | CODE-4 | `onBackendStatus` race condition in `desktop.ts`                                                | Add a `cancelled` flag pattern.                                                                                                                                |
 | CODE-6 | `Number("")` unguarded in spinner onChange                                                      | See BUG-5.                                                                                                                                                      |
-| CODE-7 | Failed sources excluded from `searchableSources` with no error message                          | Show a one-line "Source needs reindex to be searchable" hint on the Capture page when there are sources in `failed` state.                                       |
+| CODE-7 | Failed sources excluded from `searchableSources` with no error message                          | Addressed: Capture now shows failed or stale sources that cannot be searched, with an Open Sources action.                                                        |
 | CODE-8 | Reindex always reads the snapshot, never re-snapshots                                           | Detect mtime/hash differences and re-snapshot before indexing on Reindex.                                                                                      |
 | CODE-9 | `iter_web_documents` may surface confusing errors when crawl4ai is half-installed                | Addressed: dependency import failures are wrapped with a clean missing-module message.                                                                          |
 
@@ -532,7 +539,7 @@ Not a bug, but the existing `qa-report.md` at the repo root is large, and `git s
 1. **BUG-1 regression test:** Add a backend test that creates a source, deletes its `snapshot_paths` from the source metadata (or moves the directory), calls `start_index_job`, and asserts the source ends up either successfully reindexed *or* in `failed` state with `document_count == previous_count` (i.e. chunks were not lost).
 2. **BUG-2 regression test:** With a registered source, POST `/api/settings/reset` and assert `source_compatibility.stale_indexed_source_count >= 1` and that the UI surfaces a confirmation.
 3. **UX-1 verification:** Open the Settings page in plain Chrome (not WebView2), tab through to the Save button before any change, and confirm it is visible and announced as "Save, dimmed" or similar. Repeat for the Search button on Sources.
-4. **PERF-1 polling verification:** With a job running, observe `db.log` for the `/api/sources` and `/api/sources/jobs/{id}` endpoints; confirm the interval grows after a configurable idle window.
+4. **PERF-1 polling verification:** Addressed in this pass by source inspection; a longer-running crawl can still be used to observe the interval backing off after repeated unchanged progress.
 5. **End-to-end smoke (long job):** Index the Ingestor codebase itself (large) to exercise the cancel button on Sources and the cancel-on-Capture flow.
 
 ---

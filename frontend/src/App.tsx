@@ -130,6 +130,7 @@ function App() {
     activeLogs,
     applyInitialSearchMode,
     applySavedSearchMode,
+    blockedSearchSources,
     cancelJob,
     clearSearchOutput,
     deletePendingSource,
@@ -423,6 +424,7 @@ function App() {
                   mode={mode}
                   message={captureMessage}
                   recentSources={recentSources}
+                  blockedSearchSources={blockedSearchSources}
                   searchableSources={searchableSources}
                   localForm={localForm}
                   webForm={webForm}

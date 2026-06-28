@@ -25,6 +25,7 @@ type CapturePageProps = {
   mode: SourceMode;
   message: Message;
   recentSources: SourceRecord[];
+  blockedSearchSources: SourceRecord[];
   searchableSources: SourceRecord[];
   localForm: LocalForm;
   webForm: WebForm;
@@ -75,6 +76,7 @@ export function CapturePage({
   mode,
   message,
   recentSources,
+  blockedSearchSources,
   searchableSources,
   localForm,
   webForm,
@@ -106,6 +108,8 @@ export function CapturePage({
   const selectedChunkCountLabel = selectedSource
     ? `${selectedSource.chunk_count} chunks`
     : "";
+  const blockedSearchSource = blockedSearchSources[0];
+  const canOpenSearchPanel = Boolean(searchableSources.length || blockedSearchSource);
 
   function openSource(sourceId: string) {
     onSelectSource(sourceId);
@@ -445,30 +449,43 @@ export function CapturePage({
           </div>
           <button
             className={styles.linkButton}
-            disabled={!searchableSources.length}
-            onClick={() => onSearchSource()}
+            disabled={!canOpenSearchPanel}
+            onClick={() => onSearchSource(searchableSources.length ? undefined : blockedSearchSource?.id)}
             type="button"
           >
-            Open search
+            {searchableSources.length ? "Open search" : "Review source"}
           </button>
         </div>
         {searchableSources.length ? (
-          <div className={styles.searchSourceList}>
-            {searchableSources.slice(0, 3).map((source) => (
-              <button
-                className={styles.searchSourceItem}
-                key={source.id}
-                onClick={() => onSearchSource(source.id)}
-                type="button"
-              >
-                <span>
-                  <strong>{source.name}</strong>
-                  <small>{formatSourceSize(source)}</small>
-                </span>
-                <Badge value={source.kind} variant={source.kind} />
-              </button>
-            ))}
-          </div>
+          <>
+            <div className={styles.searchSourceList}>
+              {searchableSources.slice(0, 3).map((source) => (
+                <button
+                  className={styles.searchSourceItem}
+                  key={source.id}
+                  onClick={() => onSearchSource(source.id)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{source.name}</strong>
+                    <small>{formatSourceSize(source)}</small>
+                  </span>
+                  <Badge value={source.kind} variant={source.kind} />
+                </button>
+              ))}
+            </div>
+            {blockedSearchSources.length ? (
+              <BlockedSearchNotice
+                sources={blockedSearchSources}
+                onOpenSource={onSearchSource}
+              />
+            ) : null}
+          </>
+        ) : blockedSearchSources.length ? (
+          <BlockedSearchNotice
+            sources={blockedSearchSources}
+            onOpenSource={onSearchSource}
+          />
         ) : (
           <div className={styles.emptyState}>Indexed sources appear here when they are ready to search.</div>
         )}
@@ -518,6 +535,30 @@ export function CapturePage({
   );
 }
 
+function BlockedSearchNotice({
+  sources,
+  onOpenSource
+}: {
+  sources: SourceRecord[];
+  onOpenSource: (sourceId?: string) => void;
+}) {
+  const source = sources[0];
+  return (
+    <div className={styles.attentionState}>
+      <span>{formatBlockedSearchSummary(sources)}</span>
+      {source ? (
+        <button
+          className={styles.linkButton}
+          onClick={() => onOpenSource(source.id)}
+          type="button"
+        >
+          Open Sources
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function latestLogLine(logs: string) {
   return latestLogLines(logs, 1).at(0);
 }
@@ -529,6 +570,18 @@ function formatReadySourceCount(count: number) {
 
 function formatSourceSize(source: SourceRecord) {
   return `${source.document_count} docs, ${source.chunk_count} chunks`;
+}
+
+function formatBlockedSearchSummary(sources: SourceRecord[]) {
+  const [source] = sources;
+  if (!source) return "";
+  if (sources.length > 1) {
+    return `${sources.length} sources need reindexing or repair before search.`;
+  }
+  if (source.status === "failed") {
+    return `${source.name} failed indexing and cannot be searched yet.`;
+  }
+  return `${source.name} must be re-indexed before search.`;
 }
 
 function JobProgress({ job }: { job: IndexJob }) {
