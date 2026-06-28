@@ -247,7 +247,7 @@
                 <Shortcut Id="UninstallShortcut"
 						  Name="Uninstall {{product_name}}"
 						  Description="Uninstalls {{product_name}}"
-						  Target="[System64Folder]msiexec.exe"
+						  Target="[SystemFolder]msiexec.exe"
 						  Arguments="/x [ProductCode]" />
 
 				<RemoveFolder Id="INSTALLDIR"
