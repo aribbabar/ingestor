@@ -154,6 +154,14 @@ Build the signed update bundle with one command:
 npm run release:build-update
 ```
 
+By default, `release:build-update` bumps the patch version first and keeps `frontend\src-tauri\tauri.conf.json`, `frontend\package.json`, `frontend\package-lock.json`, `frontend\src-tauri\Cargo.toml`, `frontend\src-tauri\Cargo.lock`, and `backend\pyproject.toml` aligned before building. Use an explicit version or bump type when needed:
+
+```powershell
+npm run release:build-update -- --version 0.2.0
+npm run release:build-update -- --bump minor
+npm run release:build-update -- --no-bump
+```
+
 The release build creates a signed Windows MSI installer and updater signature that contain the React frontend, `ingestor-daemon.exe`, the `ingestor` CLI, and app-owned skills. The release wrapper also writes a GitHub updater manifest:
 
 ```powershell
@@ -162,7 +170,7 @@ release\v0.1.0\Ingestor_0.1.0_x64_en-US.msi.sig
 release\v0.1.0\latest.json
 ```
 
-Before each release, bump the app version in `frontend\src-tauri\tauri.conf.json`. Keep the matching version values in `frontend\package.json`, `frontend\src-tauri\Cargo.toml`, and `backend\pyproject.toml` aligned when the desktop app, bundled CLI, and Python package are released together.
+Before each release, commit the version bump produced by `release:build-update` along with the release changes. Use `--no-bump` only when rebuilding the same release version.
 
 Publish the MSI, `.sig`, and a `latest.json` update manifest to the GitHub Release. The app checks this endpoint:
 
@@ -189,8 +197,8 @@ Use the contents of the generated `.sig` file as the `signature` value. The sign
 Release flow:
 
 1. Run the verification checks below.
-2. Bump versions and commit the release.
-3. Build with `npm run release:build-update`.
+2. Build with `npm run release:build-update`.
+3. Commit the generated version bump and release changes.
 4. Create a GitHub Release, for example `v0.1.1`.
 5. Upload the MSI, matching `.sig`, and `latest.json`.
 6. Install the previous release, open Settings, check for updates, and verify that the new release installs.

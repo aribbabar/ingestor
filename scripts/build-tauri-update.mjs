@@ -8,6 +8,7 @@ import {
   releaseEnvPath,
   repoRoot,
 } from "./release-env.mjs";
+import { updateReleaseVersion } from "./release-version.mjs";
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -76,6 +77,11 @@ async function main() {
         "Run: npm run release:setup-updater"
     );
   }
+
+  const releaseVersion = updateReleaseVersion(process.argv.slice(2));
+  console.log(
+    `Release version ${releaseVersion.mode}: ${releaseVersion.previousVersion} -> ${releaseVersion.version}`
+  );
 
   await runNpm(["--prefix", "frontend", "run", "tauri", "--", "build"], {
     cwd: repoRoot,
