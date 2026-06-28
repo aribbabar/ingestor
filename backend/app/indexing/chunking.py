@@ -71,9 +71,81 @@ def build_chunks(uri: str, title: str, content: str, embed: bool = True) -> list
             }
             chunks.append(chunk)
             ordinal += 1
+    chunks = merge_tiny_text_chunks(chunks, document_title=title)
     if embed:
         embed_chunks(chunks, get_embedding_indexing_config().effective_batch_size)
     return chunks
+
+
+def merge_tiny_text_chunks(chunks: list[dict], *, document_title: str) -> list[dict]:
+    merged: list[dict] = []
+    for chunk in chunks:
+        if merged and should_merge_tiny_chunk(merged[-1], chunk):
+            merged[-1] = merge_chunk_pair(merged[-1], chunk, document_title=document_title)
+            continue
+        merged.append(chunk)
+    for ordinal, chunk in enumerate(merged):
+        chunk["ordinal"] = ordinal
+    return merged
+
+
+def should_merge_tiny_chunk(left: dict, right: dict) -> bool:
+    left_path = list(left.get("section_path") or [])
+    right_path = list(right.get("section_path") or [])
+    if not left_path or not right_path:
+        return False
+    if left_path[:-1] != right_path[:-1]:
+        return False
+    if starts_major_heading(str(right.get("content") or "")):
+        return False
+    if left.get("uri") != right.get("uri"):
+        return False
+    if left.get("content_type") != right.get("content_type"):
+        return False
+    if left.get("parent_chunk_id") is not None or right.get("parent_chunk_id") is not None:
+        return False
+    if safe_chunk_kind(left) != "text" or safe_chunk_kind(right) != "text":
+        return False
+    left_content = str(left.get("content") or "").strip()
+    right_content = str(right.get("content") or "").strip()
+    combined = f"{left_content}\n\n{right_content}".strip()
+    if len(combined) > CHUNK_TARGET_CHARS:
+        return False
+    return len(left_content) < CHUNK_MIN_CHARS or len(right_content) < CHUNK_MIN_CHARS
+
+
+def merge_chunk_pair(left: dict, right: dict, *, document_title: str) -> dict:
+    section_path = list(left.get("section_path") or [])[:-1]
+    content = f"{str(left.get('content') or '').strip()}\n\n{str(right.get('content') or '').strip()}".strip()
+    title = " > ".join(section_path) or document_title
+    content_type = str(left.get("content_type") or infer_content_type(str(left.get("uri") or "")))
+    merged = {
+        **left,
+        "title": title,
+        "content": content,
+        "content_type": content_type,
+        "section_path": section_path,
+        "token_count": len(tokenize(content)),
+        "metadata": chunk_metadata(
+            uri=str(left["uri"]),
+            title=document_title,
+            section_path=section_path,
+            content_type=content_type,
+            content=content,
+            parent_content=content,
+        ),
+        "embedding_text": f"{title}\n{content}",
+    }
+    return merged
+
+
+def safe_chunk_kind(chunk: dict) -> str:
+    metadata = chunk.get("metadata")
+    if isinstance(metadata, dict):
+        kind = metadata.get("chunk_kind")
+        if isinstance(kind, str):
+            return kind
+    return infer_chunk_kind(str(chunk.get("content") or ""))
 
 
 def chunk_metadata(

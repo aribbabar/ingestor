@@ -132,6 +132,31 @@ def insert_row(session: object, chunk_id: int, source_id: str, embedding: object
     )
 
 
+def insert_rows(session: object, rows: Sequence[tuple[int, str, object]]) -> None:
+    vectors: list[tuple[int, str, list[float]]] = []
+    dimensions: int | None = None
+    for chunk_id, source_id, embedding in rows:
+        vector = parse_embedding(embedding)
+        if vector is None:
+            continue
+        if dimensions is None:
+            dimensions = len(vector)
+        if len(vector) == dimensions:
+            vectors.append((chunk_id, source_id, vector))
+    if dimensions is None:
+        return
+
+    ensure_index_table(driver_connection(session), dimensions)
+    for chunk_id, source_id, vector in vectors:
+        session.execute(
+            chunks_vec.insert().prefix_with("OR REPLACE").values(
+                rowid=chunk_id,
+                source_id=source_id,
+                embedding=serialize(vector),
+            )
+        )
+
+
 def delete_rows(session: object, chunk_ids: Sequence[int]) -> None:
     ids = list(chunk_ids)
     if not ids:

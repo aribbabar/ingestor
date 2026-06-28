@@ -245,8 +245,20 @@ class Database:
         return source
 
     def add_source_document(self, source: SourceRecord, document: dict) -> SourceRecord:
+        return self.add_source_documents(source, [document])
+
+    def add_source_documents(self, source: SourceRecord, documents: Iterable[dict]) -> SourceRecord:
+        document_list = list(documents)
+        if not document_list:
+            return source
         with Session(self.engine) as session:
-            self._insert_document(session, source.id, document)
+            vector_rows: list[tuple[int, str, object]] = []
+            fts_rows: list[dict[str, object]] = []
+            for document in document_list:
+                self._insert_document(session, source.id, document, vector_rows=vector_rows, fts_rows=fts_rows)
+            vector_index.insert_rows(session, vector_rows)
+            if fts_rows:
+                session.execute(chunks_fts.insert(), fts_rows)
             source.document_count = self._count(session, DocumentTable.id, DocumentTable.source_id == source.id)
             source.chunk_count = self._count(session, ChunkTable.id, ChunkTable.source_id == source.id)
             source.status = SourceStatus.INDEXING
@@ -316,7 +328,15 @@ class Database:
             session.execute(chunks_fts.delete().where(chunks_fts.c.rowid.in_(chunk_ids)))
             self._delete_vector_rows(session, [int(chunk_id) for chunk_id in chunk_ids if chunk_id is not None])
 
-    def _insert_document(self, session: Session, source_id: str, document: dict) -> int:
+    def _insert_document(
+        self,
+        session: Session,
+        source_id: str,
+        document: dict,
+        *,
+        vector_rows: list[tuple[int, str, object]] | None = None,
+        fts_rows: list[dict[str, object]] | None = None,
+    ) -> int:
         document_row = DocumentTable(
             source_id=source_id,
             uri=document["uri"],
@@ -362,16 +382,21 @@ class Database:
             session.flush()
             if chunk_row.id is None:
                 raise RuntimeError("Chunk insert did not return an id")
-            vector_index.insert_row(session, chunk_row.id, source_id, embedding)
-            session.execute(
-                chunks_fts.insert().values(
-                    rowid=chunk_row.id,
-                    source_id=source_id,
-                    title=chunk["title"],
-                    uri=chunk["uri"],
-                    content=chunk["content"],
-                )
-            )
+            if vector_rows is None:
+                vector_index.insert_row(session, chunk_row.id, source_id, embedding)
+            else:
+                vector_rows.append((chunk_row.id, source_id, embedding))
+            fts_row = {
+                "rowid": chunk_row.id,
+                "source_id": source_id,
+                "title": chunk["title"],
+                "uri": chunk["uri"],
+                "content": chunk["content"],
+            }
+            if fts_rows is None:
+                session.execute(chunks_fts.insert().values(**fts_row))
+            else:
+                fts_rows.append(fts_row)
             chunk_count += 1
         return chunk_count
 

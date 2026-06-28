@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 
 from app.indexing.chunking import build_document
 from app.indexing.content import infer_title, normalize_content
+from app.indexing.timing import IndexingTimings
 from app.retrieval.embeddings import get_embedding_indexing_config
 from app.indexing.embedding_pipeline import embed_pending_documents
 
@@ -44,6 +46,7 @@ SKIP_DIRS = {
     "target",
     "venv",
 }
+EMBEDDING_FLUSH_BATCHES = 8
 
 
 def documents_from_paths(paths: list[Path], uri_paths: list[Path] | None = None) -> list[dict]:
@@ -56,13 +59,16 @@ def iter_documents_from_paths(
     *,
     on_scan: Callable[[int, int, Path], None] | None = None,
     should_cancel: Callable[[], None] | None = None,
+    timings: IndexingTimings | None = None,
 ):
     pending_documents: list[dict] = []
     pending_chunks: list[dict] = []
     indexing_config = get_embedding_indexing_config()
     batch_size = indexing_config.effective_batch_size
-    candidates_by_path = document_candidates(paths, uri_paths)
-    total_candidates = sum(len(candidates) for _root, _uri_root, _is_file, candidates in candidates_by_path)
+    flush_chunk_count = batch_size if batch_size == 1 else batch_size * EMBEDDING_FLUSH_BATCHES
+    with phase(timings, "discovery"):
+        candidates_by_path = document_candidates(paths, uri_paths)
+        total_candidates = sum(len(candidates) for _root, _uri_root, _is_file, candidates in candidates_by_path)
     scanned = 0
 
     for path, uri_path, uri_is_file, candidates in candidates_by_path:
@@ -72,25 +78,30 @@ def iter_documents_from_paths(
             scanned += 1
             if on_scan:
                 on_scan(scanned, total_candidates, file_path)
-            document = document_from_file(
-                file_path,
-                path if path.is_dir() else path.parent,
-                uri_path=uri_path,
-                uri_is_file=uri_is_file,
-                embed=False,
-            )
+            with phase(timings, "normalize_chunk"):
+                document = document_from_file(
+                    file_path,
+                    path if path.is_dir() else path.parent,
+                    uri_path=uri_path,
+                    uri_is_file=uri_is_file,
+                    embed=False,
+                )
             if document:
                 pending_documents.append(document)
                 pending_chunks.extend(document["chunks"])
-                if len(pending_chunks) >= batch_size:
-                    yield from embed_pending_documents(pending_documents, pending_chunks, batch_size)
+                if len(pending_chunks) >= flush_chunk_count:
+                    with phase(timings, "embedding"):
+                        embedded_documents = list(embed_pending_documents(pending_documents, pending_chunks, batch_size))
+                    yield from embedded_documents
                     if should_cancel:
                         should_cancel()
                     pending_documents = []
                     pending_chunks = []
 
     if pending_documents:
-        yield from embed_pending_documents(pending_documents, pending_chunks, batch_size)
+        with phase(timings, "embedding"):
+            embedded_documents = list(embed_pending_documents(pending_documents, pending_chunks, batch_size))
+        yield from embedded_documents
 
 
 def document_candidates(paths: list[Path], uri_paths: list[Path] | None = None) -> list[tuple[Path, Path, bool, list[Path]]]:
@@ -148,4 +159,13 @@ def document_uri(path: Path, root: Path, uri_path: Path | None, uri_is_file: boo
         return str(uri_path / path.relative_to(root))
     except ValueError:
         return str(uri_path / path.name)
+
+
+@contextmanager
+def phase(timings: IndexingTimings | None, name: str):
+    if timings is None:
+        yield
+        return
+    with timings.phase(name):
+        yield
 

@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import app.retrieval.search as search_module
 import app.indexing.crawler as crawler_module
+import app.indexing.embedding_pipeline as embedding_pipeline
 from app.indexing.crawler import markdown_from_result
 from app.db import Database
 from app.retrieval.embeddings import embedding_signature, tokenize
@@ -269,6 +270,58 @@ Use the settings page.
 
         self.assertIn("Setup", titles)
         self.assertIn("Runtime", titles)
+
+    def test_tiny_sibling_text_sections_merge_without_crossing_major_headings(self) -> None:
+        document = build_document(
+            "docs/api.md",
+            "API",
+            """# Reference
+
+## Widgets
+
+### Alpha
+
+Alpha controls setup.
+
+### Beta
+
+Beta controls runtime.
+""",
+            embed=False,
+        )
+
+        alpha_chunks = [chunk for chunk in document["chunks"] if "### Alpha" in chunk["content"]]
+
+        self.assertEqual(len(alpha_chunks), 1)
+        self.assertIn("### Beta", alpha_chunks[0]["content"])
+        self.assertEqual(alpha_chunks[0]["title"], "Reference > Widgets")
+
+    def test_ollama_embedding_batches_preserve_order_when_parallelized(self) -> None:
+        original_get_embedding_config = embedding_pipeline.get_embedding_config
+        original_embed_texts = embedding_pipeline.embed_texts
+
+        class FakeConfig:
+            provider = "ollama"
+
+        def fake_embed_texts(texts: list[str]) -> list[list[float]]:
+            return [[float(len(text)), float(index)] for index, text in enumerate(texts)]
+
+        try:
+            embedding_pipeline.get_embedding_config = lambda: FakeConfig()
+            embedding_pipeline.embed_texts = fake_embed_texts
+            embeddings = embedding_pipeline.embed_text_batches([["one", "two"], ["three"], ["four"]])
+        finally:
+            embedding_pipeline.get_embedding_config = original_get_embedding_config
+            embedding_pipeline.embed_texts = original_embed_texts
+
+        self.assertEqual(
+            embeddings,
+            [
+                [[3.0, 0.0], [3.0, 1.0]],
+                [[5.0, 0.0]],
+                [[4.0, 0.0]],
+            ],
+        )
 
 
 class CrawlMarkdownSelectionTests(TestCase):
@@ -743,6 +796,54 @@ class VectorIndexTests(TestCase):
         stored_metadata = json.loads(chunk_metadata["metadata"])
         self.assertEqual(stored_metadata["source_id"], "vec-source")
         self.assertEqual(stored_metadata["document_uri"], "vectors.md")
+
+    def test_batched_document_insert_populates_counts_fts_and_vector_index(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            test_db = Database(Path(directory) / "ingestor.sqlite")
+            try:
+                source = SourceRecord(
+                    id="batch-source",
+                    kind=SourceKind.LOCAL,
+                    name="batch-source",
+                    version="test",
+                    location="memory",
+                    metadata={"embedding": embedding_signature()},
+                )
+                test_db.upsert_source(source)
+                indexed = test_db.add_source_documents(
+                    source,
+                    [
+                        {
+                            "uri": "alpha.md",
+                            "title": "Alpha",
+                            "content": "# Alpha",
+                            "content_hash": "alpha",
+                            "chunks": [vector_chunk(0, "Alpha", "alpha", [1.0, 0.0, 0.0])],
+                        },
+                        {
+                            "uri": "beta.md",
+                            "title": "Beta",
+                            "content": "# Beta",
+                            "content_hash": "beta",
+                            "chunks": [vector_chunk(0, "Beta", "beta", [0.0, 1.0, 0.0])],
+                        },
+                    ],
+                )
+
+                with test_db.connect() as connection:
+                    document_count = connection.execute("SELECT count(*) FROM documents").fetchone()[0]
+                    chunk_count = connection.execute("SELECT count(*) FROM chunks").fetchone()[0]
+                    fts_count = connection.execute("SELECT count(*) FROM chunks_fts").fetchone()[0]
+                    vec_count = connection.execute("SELECT count(*) FROM chunks_vec").fetchone()[0]
+            finally:
+                test_db.engine.dispose()
+
+        self.assertEqual(indexed.document_count, 2)
+        self.assertEqual(indexed.chunk_count, 2)
+        self.assertEqual(document_count, 2)
+        self.assertEqual(chunk_count, 2)
+        self.assertEqual(fts_count, 2)
+        self.assertEqual(vec_count, 2)
 
     def test_sqlite_vec_index_is_backfilled_for_existing_chunks(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:

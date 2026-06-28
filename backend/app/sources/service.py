@@ -6,6 +6,7 @@ import re
 import shutil
 import threading
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from app.core.config import get_settings
 from app.indexing.crawler import iter_web_documents
 from app.db import db
 from app.indexing.discovery import SKIP_DIRS as SNAPSHOT_SKIP_DIRS
+from app.indexing.timing import IndexingTimings
 from app.retrieval.embeddings import embedding_signature, get_embedding_config, get_embedding_indexing_config
 from app.indexing.documents import iter_documents_from_paths
 from app.domain.models import (
@@ -29,10 +31,35 @@ logger = logging.getLogger(__name__)
 active_job_ids: set[str] = set()
 active_jobs_lock = threading.Lock()
 CANCELLATION_PENDING_MESSAGE = "Cancellation requested. Waiting for the current page fetch to finish."
+LOCAL_DOCUMENT_WRITE_BATCH_SIZE = 64
+PROGRESS_UPDATE_INTERVAL_SECONDS = 0.75
+PROGRESS_UPDATE_ITEM_INTERVAL = 25
+INDEX_LOG_DOCUMENT_INTERVAL = 50
 
 
 class IndexCancelled(RuntimeError):
     """Raised when a running indexing job receives a cancellation request."""
+
+
+@dataclass
+class ProgressReporter:
+    job: JobRecord | None
+    timings: IndexingTimings
+    last_update_at: float = 0.0
+    last_progress_current: int = 0
+
+    def update(self, current: int, total: int | None, label: str, *, force: bool = False) -> None:
+        if self.job is None:
+            return
+        now = time.perf_counter()
+        enough_time = now - self.last_update_at >= PROGRESS_UPDATE_INTERVAL_SECONDS
+        enough_items = current - self.last_progress_current >= PROGRESS_UPDATE_ITEM_INTERVAL
+        complete = total is not None and current >= total
+        if not (force or complete or enough_time or enough_items):
+            return
+        update_job_progress(self.job, current, total, label, timings=self.timings)
+        self.last_update_at = now
+        self.last_progress_current = current
 
 
 def register_local_source(request: LocalSourceRequest) -> SourceRecord:
@@ -255,17 +282,18 @@ def index_source(source_id: str, job: JobRecord | None = None) -> SourceRecord:
     started_timer = time.perf_counter()
     embedding_config = get_embedding_config()
     indexing_config = get_embedding_indexing_config()
+    timings = IndexingTimings()
     source.status = SourceStatus.INDEXING
     source.error = None
     db.upsert_source(source)
-    log(job, f"Indexing {source.name} ({source.kind})")
+    log(job, f"Indexing {source.name} ({source.kind})", timings=timings)
 
     try:
         ensure_job_not_cancelled(job)
         if source.kind == SourceKind.LOCAL:
-            indexed = index_local_source_incrementally(source, job)
+            indexed = index_local_source_incrementally(source, job, timings)
         else:
-            indexed = asyncio.run(index_web_source_incrementally(source, job))
+            indexed = asyncio.run(index_web_source_incrementally(source, job, timings))
         finished_at = datetime.now(UTC)
         indexed.metadata = {
             **indexed.metadata,
@@ -279,29 +307,33 @@ def index_source(source_id: str, job: JobRecord | None = None) -> SourceRecord:
                 "indexing_strategy": indexing_config.strategy.value,
                 "embedding_batch_size": indexing_config.batch_size,
                 "effective_embedding_batch_size": indexing_config.effective_batch_size,
+                "phase_seconds": timings.as_dict(),
             },
         }
         indexed = db.upsert_source(indexed)
-        log(job, f"Indexed {indexed.document_count} documents into {indexed.chunk_count} chunks")
+        log(job, f"Indexed {indexed.document_count} documents into {indexed.chunk_count} chunks", timings=timings)
         if job:
-            db.update_job(job, JobStatus.SUCCEEDED, "Index complete")
+            with timings.phase("job_updates"):
+                db.update_job(job, JobStatus.SUCCEEDED, "Index complete")
         return indexed
     except IndexCancelled as exc:
         source = db.get_source(source.id) or source
         source.status = SourceStatus.REGISTERED
         source.error = str(exc)
         db.upsert_source(source)
-        log(job, str(exc))
+        log(job, str(exc), timings=timings)
         if job:
-            db.update_job(job, JobStatus.CANCELLED, str(exc))
+            with timings.phase("job_updates"):
+                db.update_job(job, JobStatus.CANCELLED, str(exc))
         raise
     except Exception as exc:
         source.status = SourceStatus.FAILED
         source.error = str(exc)
         db.upsert_source(source)
-        log(job, f"Index failed: {exc}")
+        log(job, f"Index failed: {exc}", timings=timings)
         if job:
-            db.update_job(job, JobStatus.FAILED, str(exc))
+            with timings.phase("job_updates"):
+                db.update_job(job, JobStatus.FAILED, str(exc))
         raise
 
 
@@ -356,30 +388,38 @@ def _run_job(source_id: str, job: JobRecord) -> None:
             active_job_ids.discard(job.id)
 
 
-def index_local_source_incrementally(source: SourceRecord, job: JobRecord | None) -> SourceRecord:
-    paths, uri_paths = local_source_paths(source)
-    db.clear_source_documents(source)
+def index_local_source_incrementally(source: SourceRecord, job: JobRecord | None, timings: IndexingTimings) -> SourceRecord:
+    with timings.phase("snapshot_refresh"):
+        paths, uri_paths = local_source_paths(source)
+    with timings.phase("db_write"):
+        source = db.clear_source_documents(source)
     indexed = source
-    log(job, "Scanning local snapshot for supported docs")
+    reporter = ProgressReporter(job=job, timings=timings)
+    log(job, "Scanning local snapshot for supported docs", timings=timings)
 
     def on_scan(current: int, total: int, file_path: Path) -> None:
-        update_job_progress(job, current, total, f"Scanning {file_path.name}")
+        reporter.update(current, total, f"Scanning {file_path.name}")
 
+    pending_documents: list[dict] = []
     for document in iter_documents_from_paths(
         paths,
         uri_paths,
         on_scan=on_scan,
         should_cancel=lambda: ensure_job_not_cancelled(job),
+        timings=timings,
     ):
         ensure_job_not_cancelled(job)
-        indexed = db.add_source_document(source, document)
-        if job:
-            update_job_progress(job, job.progress_current, job.progress_total, document["uri"])
-        log(
-            job,
-            f"Indexed file {indexed.document_count}: {document['uri']} "
-            f"({indexed.chunk_count} chunks total)",
-        )
+        pending_documents.append(document)
+        if len(pending_documents) >= LOCAL_DOCUMENT_WRITE_BATCH_SIZE:
+            indexed = flush_local_documents(source, pending_documents, timings)
+            reporter.update(indexed.document_count, reporter.job.progress_total if reporter.job else None, document["uri"], force=True)
+            log_index_progress(job, indexed, document["uri"], timings)
+            pending_documents = []
+
+    if pending_documents:
+        indexed = flush_local_documents(source, pending_documents, timings)
+        reporter.update(indexed.document_count, reporter.job.progress_total if reporter.job else None, pending_documents[-1]["uri"], force=True)
+        log_index_progress(job, indexed, pending_documents[-1]["uri"], timings, force=True)
 
     indexed = db.get_source(source.id) or indexed
     if indexed.document_count == 0:
@@ -389,10 +429,34 @@ def index_local_source_incrementally(source: SourceRecord, job: JobRecord | None
     return db.upsert_source(indexed)
 
 
-async def index_web_source_incrementally(source: SourceRecord, job: JobRecord | None) -> SourceRecord:
-    db.clear_source_documents(source)
+def flush_local_documents(source: SourceRecord, documents: list[dict], timings: IndexingTimings) -> SourceRecord:
+    with timings.phase("db_write"):
+        return db.add_source_documents(source, documents)
+
+
+def log_index_progress(
+    job: JobRecord | None,
+    indexed: SourceRecord,
+    uri: str,
+    timings: IndexingTimings,
+    *,
+    force: bool = False,
+) -> None:
+    if not force and indexed.document_count % INDEX_LOG_DOCUMENT_INTERVAL != 0:
+        return
+    log(
+        job,
+        f"Indexed file {indexed.document_count}: {uri} "
+        f"({indexed.chunk_count} chunks total)",
+        timings=timings,
+    )
+
+
+async def index_web_source_incrementally(source: SourceRecord, job: JobRecord | None, timings: IndexingTimings) -> SourceRecord:
+    with timings.phase("db_write"):
+        db.clear_source_documents(source)
     indexed = source
-    log(job, "Crawling website and indexing pages as they are discovered")
+    log(job, "Crawling website and indexing pages as they are discovered", timings=timings)
 
     async for document in iter_web_documents(
         source.location,
@@ -404,17 +468,20 @@ async def index_web_source_incrementally(source: SourceRecord, job: JobRecord | 
         should_cancel=lambda: ensure_job_not_cancelled(job),
     ):
         ensure_job_not_cancelled(job)
-        indexed = db.add_source_document(source, document)
+        with timings.phase("db_write"):
+            indexed = db.add_source_document(source, document)
         update_job_progress(
             job,
             indexed.document_count,
             None,
             document["uri"],
+            timings=timings,
         )
         log(
             job,
             f"Indexed page {indexed.document_count}: {document['uri']} "
             f"({indexed.chunk_count} chunks total)",
+            timings=timings,
         )
 
     indexed = db.get_source(source.id) or indexed
@@ -433,15 +500,31 @@ def ensure_job_not_cancelled(job: JobRecord | None) -> None:
         raise IndexCancelled("Indexing cancelled.")
 
 
-def update_job_progress(job: JobRecord | None, current: int, total: int | None, label: str) -> None:
+def update_job_progress(
+    job: JobRecord | None,
+    current: int,
+    total: int | None,
+    label: str,
+    *,
+    timings: IndexingTimings | None = None,
+) -> None:
     if job is None:
         return
-    db.update_job(
-        job,
-        progress_current=current,
-        progress_total=total,
-        progress_label=label,
-    )
+    if timings is None:
+        db.update_job(
+            job,
+            progress_current=current,
+            progress_total=total,
+            progress_label=label,
+        )
+        return
+    with timings.phase("job_updates"):
+        db.update_job(
+            job,
+            progress_current=current,
+            progress_total=total,
+            progress_label=label,
+        )
 
 
 def mark_source_cancelled(source_id: str) -> None:
@@ -453,9 +536,17 @@ def mark_source_cancelled(source_id: str) -> None:
     db.upsert_source(source)
 
 
-def log(job: JobRecord | None, message: str) -> None:
+def log(job: JobRecord | None, message: str, *, timings: IndexingTimings | None = None) -> None:
     if job is None:
         return
+    if timings is None:
+        write_job_log(job, message)
+        return
+    with timings.phase("job_updates"):
+        write_job_log(job, message)
+
+
+def write_job_log(job: JobRecord, message: str) -> None:
     settings = get_settings()
     log_path = settings.job_log_dir / f"{job.id}.log"
     with log_path.open("a", encoding="utf-8") as handle:
