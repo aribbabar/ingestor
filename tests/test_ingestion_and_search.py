@@ -533,6 +533,35 @@ class VectorIndexTests(TestCase):
 
         self.assertEqual(len(snapshots), 1)
 
+    def test_local_source_response_location_uses_stored_snapshot_path(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            root = Path(directory)
+            docs = root / "docs"
+            docs.mkdir()
+            (docs / "guide.md").write_text("# Guide", encoding="utf-8")
+            snapshot_root = root / "local"
+            test_db = Database(root / "ingestor.sqlite")
+            original_db = source_service.db
+            original_get_settings = source_service.get_settings
+
+            class Settings:
+                local_source_dir = snapshot_root
+
+            try:
+                source_service.db = test_db
+                source_service.get_settings = lambda: Settings()
+                source = source_service.register_local_source(source_service.LocalSourceRequest(paths=[docs], name="docs"))
+                response_source = source_service.source_for_response(source)
+            finally:
+                source_service.db = original_db
+                source_service.get_settings = original_get_settings
+                test_db.engine.dispose()
+
+        self.assertEqual(source.location, str(docs.resolve()))
+        self.assertNotEqual(response_source.location, source.location)
+        self.assertEqual(response_source.location, str(Path(str(source.metadata["snapshot_paths"][0])).resolve()))
+        self.assertEqual(response_source.metadata["original_paths"], [str(docs.resolve())])
+
     def test_reindex_recreates_missing_local_snapshot_before_clearing_documents(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             root = Path(directory)

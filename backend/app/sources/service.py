@@ -109,6 +109,20 @@ def local_source_original_paths(source: SourceRecord) -> list[Path]:
     return [Path(path.strip()).expanduser().resolve() for path in source.location.split(";") if path.strip()]
 
 
+def source_for_response(source: SourceRecord) -> SourceRecord:
+    if source.kind != SourceKind.LOCAL:
+        return source
+    stored_location = local_source_stored_location(source)
+    if not stored_location:
+        return source
+    return source.model_copy(update={"location": stored_location})
+
+
+def local_source_stored_location(source: SourceRecord) -> str:
+    snapshot_paths = metadata_path_list(source, "snapshot_paths") or metadata_path_list(source, "paths")
+    return "; ".join(str(path) for path in snapshot_paths)
+
+
 def path_key(path: Path) -> str:
     return str(path.expanduser().resolve()).casefold()
 

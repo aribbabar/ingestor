@@ -35,7 +35,7 @@ from app.domain.models import (
 from app.retrieval.search import SourceNotQueryableError, current_embedding_display, search_chunks, stale_indexed_source_count
 from app.retrieval.settings import get_default_search_mode, reset_default_search_mode, set_default_search_mode
 from app.sources.service import cancel_index_job, delete_source as delete_registered_source
-from app.sources.service import read_job_log, register_local_source, register_web_source, start_index_job
+from app.sources.service import read_job_log, register_local_source, register_web_source, source_for_response, start_index_job
 
 router = APIRouter(prefix="/api")
 router.include_router(folders_router)
@@ -155,7 +155,7 @@ def update_retrieval_settings(request: RetrievalSettingsUpdate) -> dict:
 
 @router.get("/sources")
 def list_sources() -> dict:
-    return {"sources": db.list_sources(), "jobs": db.list_jobs()}
+    return {"sources": [source_for_response(source) for source in db.list_sources()], "jobs": db.list_jobs()}
 
 
 @router.post("/sources/local-folder", response_model=SourceRegistrationResponse)
