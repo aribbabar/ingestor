@@ -1,6 +1,6 @@
 [package]
 name = "ingestor"
-version = "0.1.3"
+version = "0.1.4"
 description = "Desktop documentation ingestion and retrieval for local agents."
 authors = ["Arib Farooqui"]
 edition = "2021"
